@@ -1,0 +1,28 @@
+<div class="chat-container">
+  <div class="messages" #messagesContainer>
+    <div
+      *ngFor="let msg of messages"
+      class="message"
+      [ngClass]="{
+        'message--user': msg.from === 'user',
+        'message--assistant': msg.from === 'assistant',
+        'message--error': msg.isError
+      }"
+    >
+      <div class="message__bubble">{{ msg.content }}</div>
+    </div>
+  </div>
+
+  <form class="chat-input" (ngSubmit)="onSubmit()">
+    <textarea
+      [(ngModel)]="question"
+      name="question"
+      rows="2"
+      placeholder="Posez une question sur votre code..."
+      [disabled]="isSending"
+    ></textarea>
+    <button type="submit" [disabled]="isSending || !question.trim()">
+      {{ isSending ? 'Envoi...' : 'Envoyer' }}
+    </button>
+  </form>
+</div>
