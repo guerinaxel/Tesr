@@ -1,0 +1,35 @@
+<section class="rag-builder">
+  <h1>Build RAG Index</h1>
+  <p class="rag-builder__description">
+    Provide a project root (optional) to trigger the backend index build.
+  </p>
+
+  <form class="rag-builder__form" (ngSubmit)="onSubmit()">
+    <label class="rag-builder__label" for="rootInput">Project root</label>
+    <input
+      id="rootInput"
+      name="root"
+      type="text"
+      [(ngModel)]="root"
+      placeholder="/workspace/project"
+      [disabled]="isSubmitting"
+    />
+
+    <button type="submit" [disabled]="isSubmitting">
+      <span *ngIf="isSubmitting" class="spinner" aria-hidden="true"></span>
+      {{ isSubmitting ? 'Sending...' : 'Send request' }}
+    </button>
+  </form>
+
+  <div
+    *ngIf="toast"
+    class="toast"
+    [ngClass]="{
+      'toast--success': toast.type === 'success',
+      'toast--error': toast.type === 'error'
+    }"
+    role="status"
+  >
+    {{ toast.message }}
+  </div>
+</section>
