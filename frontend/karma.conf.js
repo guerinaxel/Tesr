@@ -1,6 +1,8 @@
 // Karma configuration file, see link for more information
 // https://karma-runner.github.io/6.4/config/configuration-file.html
 
+const path = require('path');
+
 const isCI = !!process.env.CI;
 
 module.exports = function (config) {
@@ -25,7 +27,7 @@ module.exports = function (config) {
       reporters: [{ type: 'html' }, { type: 'text-summary' }],
     },
     junitReporter: {
-      outputDir: 'test-results',
+      outputDir: path.join(__dirname, 'test-results'),
       outputFile: 'karma-results.xml',
       useBrowserName: false,
     },
