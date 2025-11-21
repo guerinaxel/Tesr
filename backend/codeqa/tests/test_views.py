@@ -4,6 +4,7 @@ import importlib
 import sys
 import types
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.test import SimpleTestCase
 from rest_framework import status
@@ -24,7 +25,7 @@ from codeqa import rag_index as rag_index_module
 importlib.reload(rag_index_module)
 from codeqa import rag_service as rag_service_module
 importlib.reload(rag_service_module)
-from codeqa.views import CodeQAView, HealthView
+from codeqa.views import BuildRagIndexView, CodeQAView, HealthView
 
 
 class CodeQAViewTests(SimpleTestCase):
@@ -67,3 +68,44 @@ class HealthViewTests(SimpleTestCase):
 
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertEqual({"status": "ok"}, response.data)
+
+
+class BuildRagIndexViewTests(SimpleTestCase):
+    def setUp(self) -> None:
+        self.factory = APIRequestFactory()
+
+    def test_triggers_build_with_custom_root(self) -> None:
+        request = self.factory.post(
+            "/api/code-qa/build-rag/",
+            {"root": "/tmp/project"},
+            format="json",
+        )
+
+        with patch("codeqa.views.call_command") as mock_call_command:
+            response = BuildRagIndexView.as_view()(request)
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        args, kwargs = mock_call_command.call_args
+        self.assertEqual("build_rag_index", args[0])
+        self.assertEqual("/tmp/project", kwargs["root"])
+        self.assertIn("stdout", kwargs)
+        self.assertIn("stderr", kwargs)
+
+    def test_defaults_root_when_missing(self) -> None:
+        request = self.factory.post("/api/code-qa/build-rag/", {}, format="json")
+
+        with patch("codeqa.views.call_command") as mock_call_command:
+            response = BuildRagIndexView.as_view()(request)
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        _args, kwargs = mock_call_command.call_args
+        self.assertNotIn("root", kwargs)
+
+    def test_returns_error_on_failure(self) -> None:
+        request = self.factory.post("/api/code-qa/build-rag/", {}, format="json")
+
+        with patch("codeqa.views.call_command", side_effect=RuntimeError("boom")):
+            response = BuildRagIndexView.as_view()(request)
+
+        self.assertEqual(status.HTTP_500_INTERNAL_SERVER_ERROR, response.status_code)
+        self.assertIn("detail", response.data)
