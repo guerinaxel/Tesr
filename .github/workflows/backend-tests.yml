@@ -7,6 +7,9 @@ on:
 
 jobs:
   test:
+    permissions:
+      contents: read
+      checks: write
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -41,11 +44,11 @@ jobs:
             --output-dir test-results
 
       - name: Publish test results
-        if: always()
+        if: always() && hashFiles('backend/test-results/**/*.xml') != ''
         uses: EnricoMi/publish-unit-test-result-action@v2
         with:
           files: backend/test-results/**/*.xml
-          check_run: false
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Fail if tests failed
         if: steps.backend_tests.outcome == 'failure'
