@@ -7,6 +7,7 @@
     "start": "ng serve ai-code-assistant-frontend",
     "build": "ng build ai-code-assistant-frontend",
     "test": "ng test ai-code-assistant-frontend",
+    "test:ci": "ng test ai-code-assistant-frontend --watch=false --browsers=ChromeHeadlessCI --progress=false --reporters=junit",
     "lint": "ng lint"
   },
   "dependencies": {

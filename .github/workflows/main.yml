@@ -83,10 +83,11 @@ jobs:
         id: frontend_tests
         continue-on-error: true
         env:
+          CI: true
           CHROME_BIN: /usr/bin/google-chrome
         run: |
           mkdir -p test-results
-          npm run test -- --watch=false --browsers=ChromeHeadless
+          npm run test:ci
 
       - name: Publish test results
         if: always() && hashFiles('frontend/test-results/**/*.xml') != ''

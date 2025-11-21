@@ -7,7 +7,10 @@ const path = require('path');
 const isCI = !!process.env.CI;
 
 module.exports = function (config) {
-  const junitOutputDir = path.resolve(__dirname, 'test-results');
+  const junitOutputDir = path.resolve(
+    __dirname,
+    process.env.TEST_OUTPUT_DIR || 'test-results'
+  );
 
   if (!fs.existsSync(junitOutputDir)) {
     fs.mkdirSync(junitOutputDir, { recursive: true });
