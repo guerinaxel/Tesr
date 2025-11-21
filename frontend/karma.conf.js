@@ -32,8 +32,8 @@ module.exports = function (config) {
     reporters: ['progress', 'kjhtml', 'junit'],
     customLaunchers: {
       ChromeHeadlessCI: {
-        base: 'Chrome',
-        flags: ['--headless', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
+        base: 'ChromeHeadless',
+        flags: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
       },
     },
     port: 9876,
