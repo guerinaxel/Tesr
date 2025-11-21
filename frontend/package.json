@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
-    "build": "ng build",
-    "test": "ng test",
+    "start": "ng serve ai-code-assistant-frontend",
+    "build": "ng build ai-code-assistant-frontend",
+    "test": "ng test ai-code-assistant-frontend",
     "lint": "ng lint"
   },
   "dependencies": {

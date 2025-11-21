@@ -22,9 +22,22 @@
           "options": {
             "browserTarget": "ai-code-assistant-frontend:build"
           }
+        },
+        "test": {
+          "builder": "@angular-devkit/build-angular:karma",
+          "options": {
+            "polyfills": ["zone.js", "zone.js/testing"],
+            "tsConfig": "tsconfig.spec.json",
+            "inlineStyleLanguage": "scss",
+            "assets": [],
+            "styles": [],
+            "scripts": []
+          }
         }
       }
     }
   },
-  "defaultProject": "ai-code-assistant-frontend"
+  "cli": {
+    "analytics": false
+  }
 }

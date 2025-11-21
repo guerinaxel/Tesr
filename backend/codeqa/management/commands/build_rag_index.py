@@ -7,6 +7,7 @@ from django.core.management.base import BaseCommand, CommandParser
 
 from codeqa.code_extractor import collect_code_chunks
 from codeqa.rag_index import RagConfig, RagIndex
+from codeqa.rag_service import _get_paths_from_env
 
 
 class Command(BaseCommand):
@@ -38,8 +39,7 @@ class Command(BaseCommand):
 
         self.stdout.write(f"Collected {len(chunks)} chunks. Building RAG index...")
 
-        index_path = Path("/data/rag_index.faiss")
-        docs_path = Path("/data/rag_docs.pkl")
+        index_path, docs_path = _get_paths_from_env()
         config = RagConfig(index_path=index_path, docs_path=docs_path)
 
         if not force and index_path.exists():

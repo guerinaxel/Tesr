@@ -45,11 +45,11 @@ class RagIndex:
         self._docs = texts
 
     def load(self) -> None:
-        if not self._config.index_path.exists() or not self._config.docs_path.exists():
-            raise FileNotFoundError("RAG index or docs file is missing.")
-
-        self._index = faiss.read_index(str(self._config.index_path))
-        self._docs = joblib.load(self._config.docs_path)
+        try:
+            self._index = faiss.read_index(str(self._config.index_path))
+            self._docs = joblib.load(self._config.docs_path)
+        except Exception as exc:  # pragma: no cover - defensive path
+            raise FileNotFoundError("RAG index or docs file is missing.") from exc
 
     def search(self, query: str, k: int = 5) -> List[Tuple[str, float]]:
         if self._index is None or not self._docs:
