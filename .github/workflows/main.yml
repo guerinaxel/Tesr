@@ -86,7 +86,7 @@ jobs:
           CHROME_BIN: /usr/bin/google-chrome
         run: |
           mkdir -p test-results
-          npm run test -- --watch=false --browsers=ChromeHeadlessCI
+          npm run test -- --watch=false --browsers=ChromeHeadless
 
       - name: Publish test results
         if: always() && hashFiles('frontend/test-results/**/*.xml') != ''
