@@ -7,3 +7,4 @@ sentence-transformers>=2.6
 faiss-cpu>=1.8
 joblib>=1.4
 ollama>=0.3.0
+unittest-xml-reporting>=3.2

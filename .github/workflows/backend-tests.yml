@@ -26,6 +26,18 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run Django tests
+        id: backend_tests
+        continue-on-error: true
         env:
           DJANGO_SETTINGS_MODULE: project.settings.dev
-        run: python manage.py test
+        run: python manage.py test --verbosity 2 --buffer --testrunner=xmlrunner.extra.djangotestrunner.XMLTestRunner --noinput --settings=project.settings.dev --output-dir test-results
+
+      - name: Publish test results
+        if: always()
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: backend/test-results/**/*.xml
+
+      - name: Fail if tests failed
+        if: steps.backend_tests.outcome == 'failure'
+        run: exit 1
