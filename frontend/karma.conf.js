@@ -1,9 +1,21 @@
 // Karma configuration file, see link for more information
 // https://karma-runner.github.io/6.4/config/configuration-file.html
 
+const fs = require('fs');
+const path = require('path');
+
 const isCI = !!process.env.CI;
 
 module.exports = function (config) {
+  const junitOutputDir = path.resolve(
+    __dirname,
+    process.env.TEST_OUTPUT_DIR || 'test-results'
+  );
+
+  if (!fs.existsSync(junitOutputDir)) {
+    fs.mkdirSync(junitOutputDir, { recursive: true });
+  }
+
   config.set({
     basePath: '',
     frameworks: ['jasmine', '@angular-devkit/build-angular'],
@@ -25,7 +37,7 @@ module.exports = function (config) {
       reporters: [{ type: 'html' }, { type: 'text-summary' }],
     },
     junitReporter: {
-      outputDir: 'test-results',
+      outputDir: junitOutputDir,
       outputFile: 'karma-results.xml',
       useBrowserName: false,
     },

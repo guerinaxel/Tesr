@@ -50,6 +50,7 @@ jobs:
         with:
           files: backend/test-results/**/*.xml
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          comment_mode: off
           check_run: false
 
       - name: Fail if tests failed
@@ -83,10 +84,11 @@ jobs:
         id: frontend_tests
         continue-on-error: true
         env:
+          CI: true
           CHROME_BIN: /usr/bin/google-chrome
         run: |
           mkdir -p test-results
-          npm run test -- --watch=false --browsers=ChromeHeadless
+          npm run test:ci
 
       - name: Publish test results
         if: always() && hashFiles('frontend/test-results/**/*.xml') != ''
@@ -94,6 +96,7 @@ jobs:
         with:
           files: frontend/test-results/**/*.xml
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          comment_mode: off
           check_run: false
 
       - name: Fail if tests failed
