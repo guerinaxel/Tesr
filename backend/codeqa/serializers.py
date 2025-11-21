@@ -13,3 +13,13 @@ class CodeQuestionSerializer(serializers.Serializer):
         max_value=20,
         default=5,
     )
+
+
+class BuildRagRequestSerializer(serializers.Serializer):
+    root = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        default=None,
+        help_text="Optional filesystem path to use as project root when building the RAG index.",
+    )
