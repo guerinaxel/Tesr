@@ -34,6 +34,7 @@ jobs:
         continue-on-error: true
         env:
           DJANGO_SETTINGS_MODULE: project.settings.dev
+          TEST_OUTPUT_DIR: test-results
         run: |
           mkdir -p test-results
           python manage.py test \
@@ -41,8 +42,7 @@ jobs:
             --buffer \
             --testrunner=xmlrunner.extra.djangotestrunner.XMLTestRunner \
             --noinput \
-            --settings=project.settings.dev \
-            --output-dir test-results
+            --settings=project.settings.dev
 
       - name: Publish test results
         if: always() && hashFiles('backend/test-results/**/*.xml') != ''
@@ -50,6 +50,7 @@ jobs:
         with:
           files: backend/test-results/**/*.xml
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          check_run: false
 
       - name: Fail if tests failed
         if: steps.backend_tests.outcome == 'failure'
@@ -93,6 +94,7 @@ jobs:
         with:
           files: frontend/test-results/**/*.xml
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          check_run: false
 
       - name: Fail if tests failed
         if: steps.frontend_tests.outcome == 'failure'
