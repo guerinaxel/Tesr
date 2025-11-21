@@ -7,7 +7,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .rag_service import AnswerNotReadyError, answer_question
+from . import rag_service
 from .serializers import CodeQuestionSerializer
 
 
@@ -22,8 +22,8 @@ class CodeQAView(APIView):
         top_k: int = serializer.validated_data["top_k"]
 
         try:
-            answer, meta = answer_question(question=question, top_k=top_k)
-        except AnswerNotReadyError as exc:
+            answer, meta = rag_service.answer_question(question=question, top_k=top_k)
+        except rag_service.AnswerNotReadyError as exc:
             return Response(
                 {"detail": str(exc)},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
