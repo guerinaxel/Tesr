@@ -50,6 +50,7 @@ jobs:
         with:
           files: backend/test-results/**/*.xml
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          comment_mode: off
           check_run: false
 
       - name: Fail if tests failed
@@ -95,6 +96,7 @@ jobs:
         with:
           files: frontend/test-results/**/*.xml
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          comment_mode: off
           check_run: false
 
       - name: Fail if tests failed
