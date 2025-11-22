@@ -30,9 +30,9 @@ class CodeQAView(APIView):
                 {"detail": str(exc)},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
-        except Exception:
+        except Exception as e:
             return Response(
-                {"detail": "Internal server error."},
+                {"detail": "Internal server error.", "errors": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 

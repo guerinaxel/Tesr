@@ -26,6 +26,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -33,6 +34,28 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+
+# Allow Angular dev server
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:4200",
+]
+
+# Allow headers Angular sends during preflight
+CORS_ALLOW_HEADERS = [
+    "authorization",
+    "content-type",
+    "accept",
+    "origin",
+    "user-agent",
+    "x-requested-with",
+]
+
+# Allow HTTP methods used by your view
+CORS_ALLOW_METHODS = [
+    "GET",
+    "POST",
+    "OPTIONS",
 ]
 
 ROOT_URLCONF = "project.urls"

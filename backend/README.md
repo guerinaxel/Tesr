@@ -89,7 +89,7 @@ pip install -r requirements.txt
 ### 4. Configurer Ollama + LLaMA
 
 ```bash
-ollama pull llama3.1
+ollama pull llama3.1:8b
 ```
 
 ### 5. Configurer l’environnement

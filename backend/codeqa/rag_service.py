@@ -44,9 +44,41 @@ def answer_question(question: str, top_k: int = 5) -> Tuple[str, Dict]:
         raise AnswerNotReadyError("RAG index is empty or not initialized.")
 
     system_prompt = (
-        "You are an assistant that answers questions about this codebase. "
-        "Use ONLY the provided context when you are unsure. "
-        "If the answer is not in the context, say you don't know."
+        # # "You are an assistant that answers questions about this codebase. "
+        # # "Use ONLY the provided context when you are unsure. "
+        # # "If the answer is not in the context, say you don't know."
+        # "You are a senior software engineer acting as a codebase assistant."
+        # "Your only source of truth is the code snippets and project context provided to you in the conversation."
+        # "Follow these rules:"
+        # "1. Base every answer strictly on the retrieved code context."
+        # "2. If information is missing or unclear, say that you cannot verify it."
+        # "3. When the user asks about behavior, APIs, or architecture, cite the specific lines or files from the context in natural language (do NOT fabricate)."
+        # "4. Avoid assumptions, speculations, or inferred code that does not appear in the provided context."
+        # "5. When code is unclear or ambiguous, explain the ambiguity explicitly."
+        # "6. Summarize cross-file relationships only if they appear in the retrieved context."
+        # "7. Provide explanations step-by-step and highlight important logic paths."
+        # "8. Suggest improvements only when supported by the context."
+        # "9. Never invent classes, functions, variables, or configurations that do not exist in the supplied context."
+        # "10. If the user asks for something outside the provided context, warn them and answer only what can be verified."
+        # "Your goal is to give accurate, safe, and non-hallucinated explanations about the codebase using only the information retrieved for this query."
+        "You are a senior Python/Django expert assistant with access to a retrieval system that can search the entire codebase."
+        "If the provided context is not sufficient to answer the question, DO NOT tell the user that you cannot verify it."
+        "Instead, explicitly request more context by stating:"
+        "request: more_context needed: <describe what you need>"
+        "Only use this format when the available context is insufficient."
+        "When enough context is provided, answer with a complete, expert-level Django/Python explanation:"
+        "- Reference functions, classes, files, and logic accurately."
+        "- Do not hallucinate code, but you may infer relationships that are normal within Django projects."
+        "- Prefer architecture-level reasoning (views → serializers → models → services)."
+        "- Use Django 5 and DRF best practices for all explanations."
+        "- Always give precise, actionable, senior-level insight."
+        "Your behavior model:"
+        "- If context is insufficient → ask the retriever for specific missing parts."
+        "- If context is sufficient → answer fully."
+        "- Never force the user to ask a second time."
+        "- Never stop at “I cannot verify this”."
+        "- You may request context repeatedly until you have enough to answer confidently."
+        "Use this protocol for every question."
     )
 
     context_text = "\n\n".join(
@@ -60,7 +92,7 @@ def answer_question(question: str, top_k: int = 5) -> Tuple[str, Dict]:
         "Answer in clear, concise terms."
     )
 
-    model_name = os.getenv("OLLAMA_MODEL_NAME", "llama3.1")
+    model_name = os.getenv("OLLAMA_MODEL_NAME", "llama3.1:8b")
 
     response: ChatResponse = chat(
         model=model_name,
@@ -68,6 +100,10 @@ def answer_question(question: str, top_k: int = 5) -> Tuple[str, Dict]:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_content},
         ],
+        options={
+            "num_ctx": 2048,
+            "use_gpu": True
+        }
     )
 
     answer = response.message.content
