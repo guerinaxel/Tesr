@@ -78,6 +78,51 @@ class CollectCodeChunksTests(SimpleTestCase):
             any("File: sample.docx" in chunk and "Hello Word Doc" in chunk for chunk in chunks),
         )
 
+    def test_python_ast_chunking_with_nested_defs(self) -> None:
+        python_path = self.root_path / "sample.py"
+        python_path.write_text(
+            """
+class Outer:
+    def method_one(self):
+        def inner():
+            return "hi"
+        return inner()
+
+
+def standalone(value):
+    return value * 2
+""".strip()
+        )
+
+        chunks = collect_code_chunks(self.root_path)
+
+        self.assertTrue(any("class Outer" in chunk for chunk in chunks))
+        self.assertTrue(any("def standalone" in chunk for chunk in chunks))
+
+    def test_typescript_ast_chunking_and_large_nodes(self) -> None:
+        ts_path = self.root_path / "sample.ts"
+        big_body = "\n".join("console.log('line')" for _ in range(200))
+        ts_path.write_text(
+            f"""
+class Service {{
+    method() {{
+{big_body}
+    }}
+}}
+
+function helper(x: number) {{
+    return x + 1;
+}}
+""".strip()
+        )
+
+        chunks = collect_code_chunks(self.root_path)
+
+        ts_chunks = [chunk for chunk in chunks if "sample.ts" in chunk]
+        self.assertTrue(any("class Service" in chunk for chunk in ts_chunks))
+        self.assertTrue(any("function helper" in chunk for chunk in ts_chunks))
+        self.assertTrue(any(len(chunk.splitlines()) > 50 for chunk in ts_chunks))
+
 
 class ExtractPdfTextTests(SimpleTestCase):
     def setUp(self) -> None:
