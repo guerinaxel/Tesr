@@ -128,7 +128,10 @@ function helper(x: number) {{
         ts_path.write_text("function example() { return 'oops' " " ")
 
         with patch("codeqa.code_extractor.chunk_code_with_ast", side_effect=ValueError("parse err")):
-            with patch("codeqa.code_extractor.chunk_text", wraps=collect_code_chunks.__globals__["chunk_text"]) as mock_chunk:
+            with patch(
+                "codeqa.code_extractor.chunk_text",
+                wraps=collect_code_chunks.__globals__["chunk_text"],
+            ) as mock_chunk:
                 chunks = collect_code_chunks(self.root_path)
 
         ts_chunks = [chunk for chunk in chunks if "broken.ts" in chunk]
@@ -156,7 +159,10 @@ function helper(x: number) {{
         document.add_paragraph("Hello Word Doc")
         document.save(docx_path)
 
-        with patch("codeqa.code_extractor.chunk_text", wraps=collect_code_chunks.__globals__["chunk_text"]) as mock_chunk:
+        with patch(
+            "codeqa.code_extractor.chunk_text",
+            wraps=collect_code_chunks.__globals__["chunk_text"],
+        ) as mock_chunk:
             chunks = collect_code_chunks(self.root_path)
 
         self.assertTrue(any("File: sample.pdf" in chunk for chunk in chunks))

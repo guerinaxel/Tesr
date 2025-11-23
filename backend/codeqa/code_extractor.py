@@ -140,7 +140,11 @@ def _python_ast_chunks(text: str, max_chars: int = 1200) -> List[str]:
     if not chunks:
         return chunk_text(text, max_chars=max_chars)
 
-    return [piece for chunk in sorted(chunks, key=lambda c: (c.start_line, c.end_line)) for piece in _split_large_chunk(chunk, max_chars)]
+    return [
+        piece
+        for chunk in sorted(chunks, key=lambda c: (c.start_line, c.end_line))
+        for piece in _split_large_chunk(chunk, max_chars)
+    ]
 
 
 def _iter_ts_nodes(root: object, target_types: Sequence[str]) -> Iterator[object]:
