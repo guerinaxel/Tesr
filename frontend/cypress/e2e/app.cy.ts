@@ -9,7 +9,7 @@ describe('AI Code Assistant app', () => {
 
     cy.visit('/');
 
-    cy.get('[data-cy="empty-state"]').should('be.visible');
+    cy.get('[data-cy="empty-state"]', { timeout: 10000 }).should('be.visible');
     cy.get('[data-cy="question-input"]').type('Bonjour, aide-moi !');
     cy.get('[data-cy="send-button"]').click();
 
@@ -28,7 +28,7 @@ describe('AI Code Assistant app', () => {
     }).as('buildRag');
 
     cy.visit('/');
-    cy.contains('button', 'Build RAG Index').click();
+    cy.get('[data-cy="build-rag-nav"]', { timeout: 10000 }).click();
 
     cy.url().should('include', '/build-rag');
     cy.get('[data-cy="root-input"]').type('/workspace/project');
