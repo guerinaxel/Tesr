@@ -27,6 +27,7 @@ class CodeQAView(APIView):
 
         question: str = serializer.validated_data["question"]
         top_k: int = serializer.validated_data["top_k"]
+        fusion_weight: float = serializer.validated_data.get("fusion_weight", 0.5)
         system_prompt: str = serializer.validated_data["system_prompt"]
         custom_prompt: str | None = serializer.validated_data.get("custom_prompt")
         typo_prompt: str | None = serializer.validated_data.get("custom_pront")
@@ -42,6 +43,7 @@ class CodeQAView(APIView):
             answer, meta = rag_service.answer_question(
                 question=question,
                 top_k=top_k,
+                fusion_weight=fusion_weight,
                 system_prompt=system_prompt,
                 custom_prompt=custom_prompt or typo_prompt,
             )

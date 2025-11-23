@@ -37,7 +37,7 @@ class RagServiceTests(SimpleTestCase):
 
     def test_answer_question_builds_context_and_returns_meta(self) -> None:
         class FakeIndex:
-            def search(self, query: str, k: int):
+            def search(self, query: str, k: int, fusion_weight: float = 0.5):
                 return [(f"snippet for {query}", 0.42)]
 
         self.rag_service._rag_index = FakeIndex()
@@ -50,7 +50,7 @@ class RagServiceTests(SimpleTestCase):
 
     def test_answer_question_raises_when_no_context(self) -> None:
         class EmptyIndex:
-            def search(self, query: str, k: int):
+            def search(self, query: str, k: int, fusion_weight: float = 0.5):
                 return []
 
         self.rag_service._rag_index = EmptyIndex()
@@ -60,7 +60,7 @@ class RagServiceTests(SimpleTestCase):
 
     def test_document_expert_uses_qwen_model(self) -> None:
         class FakeIndex:
-            def search(self, query: str, k: int):
+            def search(self, query: str, k: int, fusion_weight: float = 0.5):
                 return [(f"snippet for {query}", 0.42)]
 
         self.rag_service._rag_index = FakeIndex()
@@ -73,7 +73,7 @@ class RagServiceTests(SimpleTestCase):
 
     def test_document_expert_falls_back_when_primary_fails(self) -> None:
         class FakeIndex:
-            def search(self, query: str, k: int):
+            def search(self, query: str, k: int, fusion_weight: float = 0.5):
                 return [(f"snippet for {query}", 0.42)]
 
         self.rag_service._rag_index = FakeIndex()
