@@ -35,6 +35,12 @@ class CodeQuestionSerializer(serializers.Serializer):
         max_value=20,
         default=5,
     )
+    fusion_weight = serializers.FloatField(
+        required=False,
+        min_value=0.0,
+        max_value=1.0,
+        default=0.5,
+    )
     topic_id = serializers.IntegerField(
         required=False,
         min_value=1,

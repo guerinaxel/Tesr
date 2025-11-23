@@ -59,6 +59,16 @@ class FakeJoblib:
         return self.storage[str(path)]
 
 
+class FakeKeywordIndex:
+    def __init__(self, results: list[tuple[int, float]]) -> None:
+        self.results = results
+        self.searches: list[tuple[str, int]] = []
+
+    def search(self, query: str, k: int = 5):
+        self.searches.append((query, k))
+        return self.results[:k]
+
+
 class RagIndexWithFakes(SimpleTestCase):
     def setUp(self) -> None:
         self.fake_storage: Dict[str, Any] = {}
@@ -92,7 +102,14 @@ class RagIndexWithFakes(SimpleTestCase):
             self.assertIsInstance(written_index, FakeIndexFlatIP)
             self.assertEqual(str(config.index_path), saved_path)
             self.assertEqual(["alpha", "beta"], self.fake_storage[str(config.docs_path)])
+            token_path = str(config.tokenized_docs_path)
+            keyword_path = str(config.keyword_index_path)
+            self.assertIn(token_path, self.fake_storage)
+            self.assertIn(keyword_path, self.fake_storage)
+            self.assertEqual([["alpha"], ["beta"]], self.fake_storage[token_path])
+            self.assertIn("idf", self.fake_storage[keyword_path])
             self.assertEqual(["alpha", "beta"], rag_index._docs)
+            self.assertEqual([["alpha"], ["beta"]], rag_index._tokenized_docs)
             self.assertIsInstance(rag_index._index, FakeIndexFlatIP)
 
     def test_load_reads_index_and_documents(self) -> None:
@@ -102,6 +119,15 @@ class RagIndexWithFakes(SimpleTestCase):
             index_path = Path(tmp) / "idx.faiss"
             docs_path = Path(tmp) / "docs.pkl"
             self.fake_storage[str(docs_path)] = ["doc1", "doc2"]
+            self.fake_storage[str(docs_path.with_name("docs_tokens.pkl"))] = [
+                ["doc1"],
+                ["doc2"],
+            ]
+            self.fake_storage[str(docs_path.with_name("docs_keywords.pkl"))] = {
+                "idf": {},
+                "doc_lengths": [1, 1],
+                "avgdl": 1.0,
+            }
 
             config = RagConfig(index_path=index_path, docs_path=docs_path)
             rag_index = RagIndex(config)
@@ -110,6 +136,8 @@ class RagIndexWithFakes(SimpleTestCase):
 
             self.assertIsInstance(rag_index._index, FakeIndexFlatIP)
             self.assertEqual(["doc1", "doc2"], rag_index._docs)
+            self.assertEqual([["doc1"], ["doc2"]], rag_index._tokenized_docs)
+            self.assertIsNotNone(rag_index._keyword_index)
 
     def test_search_returns_scored_results(self) -> None:
         from codeqa.rag_index import RagConfig, RagIndex
@@ -119,9 +147,12 @@ class RagIndexWithFakes(SimpleTestCase):
         )
         rag_index._index = FakeIndexFlatIP(3)
         rag_index._docs = ["first doc", "second doc"]
+        rag_index._tokenized_docs = [["first", "doc"], ["second", "doc"]]
+        rag_index._keyword_index = FakeKeywordIndex([(1, 1.0), (0, 0.2)])
 
-        results = rag_index.search("What is inside?", k=2)
+        results = rag_index.search("What is inside?", k=2, fusion_weight=0.2)
 
         self.assertEqual(2, len(results))
-        self.assertEqual(("first doc", 0.9), results[0])
-        self.assertEqual(("second doc", 0.8), results[1])
+        self.assertEqual("second doc", results[0][0])
+        self.assertGreater(results[0][1], results[1][1])
+        self.assertEqual([("What is inside?", 2)], rag_index._keyword_index.searches)

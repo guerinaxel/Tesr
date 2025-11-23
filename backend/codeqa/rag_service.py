@@ -50,11 +50,12 @@ def get_rag_index() -> RagIndex:
 def answer_question(
     question: str,
     top_k: int = 5,
+    fusion_weight: float = 0.5,
     system_prompt: str | None = None,
     custom_prompt: str | None = None,
 ) -> Tuple[str, Dict]:
     index = get_rag_index()
-    contexts = index.search(question, k=top_k)
+    contexts = index.search(question, k=top_k, fusion_weight=fusion_weight)
 
     if not contexts:
         raise AnswerNotReadyError("RAG index is empty or not initialized.")
