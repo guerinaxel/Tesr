@@ -18,9 +18,9 @@ const stubTopicDetail = (
 
 describe('AI Code Assistant app', () => {
   it('sends a chat message and renders assistant reply', () => {
+    // Arrange
     stubTopicList([{ id: 1, name: 'Sprint 12', message_count: 0 }]);
     stubTopicDetail({ id: 1, name: 'Sprint 12', message_count: 0, messages: [] });
-
     cy.intercept('POST', `${apiUrl}/code-qa/`, (req) => {
       expect(req.body).to.deep.equal({
         question: 'Bonjour, aide-moi !',
@@ -34,16 +34,16 @@ describe('AI Code Assistant app', () => {
       });
     }).as('sendQuestion');
 
+    // Act
     cy.visit('/');
     cy.wait('@listTopics');
     cy.wait('@topicDetail');
-
     cy.get('[data-cy="question-input"]').type('Bonjour, aide-moi !');
     cy.get('[data-cy="send-button"]').click();
 
+    // Assert
     cy.get('[data-cy="send-button"]').should('be.disabled');
     cy.wait('@sendQuestion');
-
     cy.get('[data-cy="send-button"]').should('not.be.disabled');
     cy.get('.message--user .message__content').should('contain', 'Bonjour, aide-moi !');
     cy.get('.message--assistant .message__content').should('contain', 'Voici une réponse utile.');
@@ -51,9 +51,9 @@ describe('AI Code Assistant app', () => {
   });
 
   it('allows selecting a custom system prompt and sends it to the API', () => {
+    // Arrange
     stubTopicList([{ id: 2, name: 'Docs', message_count: 0 }]);
     stubTopicDetail({ id: 2, name: 'Docs', message_count: 0, messages: [] });
-
     cy.intercept('POST', `${apiUrl}/code-qa/`, (req) => {
       expect(req.body).to.deep.equal({
         question: 'Salut, explique-moi ceci.',
@@ -65,22 +65,23 @@ describe('AI Code Assistant app', () => {
       req.reply({ statusCode: 200, body: { answer: 'Réponse sur mesure.' } });
     }).as('sendCustom');
 
+    // Act
     cy.visit('/');
     cy.wait('@listTopics');
     cy.wait('@topicDetail');
-
     cy.get('[data-cy="system-prompt-select"]').click();
     cy.get('mat-option').contains('custom').click();
     cy.get('[data-cy="custom-prompt-input"]').should('be.visible').type('Parle en français');
-
     cy.get('[data-cy="question-input"]').type('Salut, explique-moi ceci.');
     cy.get('[data-cy="send-button"]').click();
 
+    // Assert
     cy.wait('@sendCustom');
     cy.get('.message--assistant .message__content').should('contain', 'Réponse sur mesure.');
   });
 
   it('creates a new topic and shows its empty conversation state', () => {
+    // Arrange
     let listCall = 0;
     cy.intercept('GET', `${apiUrl}/topics/`, (req) => {
       listCall += 1;
@@ -99,21 +100,22 @@ describe('AI Code Assistant app', () => {
     }).as('createTopic');
     stubTopicDetail({ id: 3, name: 'New thread', message_count: 0, messages: [] });
 
+    // Act
     cy.visit('/');
     cy.wait('@listTopics');
-
     cy.get('[data-cy="new-topic-input"]').type('New thread');
     cy.get('[data-cy="create-topic-button"]').click();
-
     cy.wait('@createTopic');
     cy.wait('@topicDetail');
     cy.wait('@listTopics');
 
+    // Assert
     cy.contains('[data-cy="topic-item"]', 'New thread').should('have.class', 'selected');
     cy.get('[data-cy="empty-state"]').should('contain', 'Commencez la conversation');
   });
 
   it('lists multiple topics and loads their histories when switching', () => {
+    // Arrange
     stubTopicList([
       { id: 1, name: 'Sprint 12', message_count: 2 },
       { id: 2, name: 'Bugfix', message_count: 1 },
@@ -143,33 +145,41 @@ describe('AI Code Assistant app', () => {
       'sprintDetail'
     );
 
+    // Act
     cy.visit('/');
     cy.wait('@listTopics');
     cy.wait('@bugfixDetail');
-
-    cy.contains('[data-cy="topic-item"]', 'Sprint 12').should('exist');
-    cy.contains('[data-cy="topic-item"]', 'Bugfix').should('exist');
-    cy.get('.message--assistant .message__content').should('contain', 'Please try restarting');
-
+    cy.get('.message--assistant .message__content')
+      .invoke('text')
+      .as('bugfixAssistantMessage');
     cy.contains('[data-cy="topic-item"]', 'Sprint 12').click();
     cy.wait('@sprintDetail');
-    cy.get('.message--assistant .message__content').should('contain', 'Sure thing');
+    cy.get('.message--assistant .message__content')
+      .invoke('text')
+      .as('sprintAssistantMessage');
+
+    // Assert
+    cy.contains('[data-cy="topic-item"]', 'Sprint 12').should('exist');
+    cy.contains('[data-cy="topic-item"]', 'Bugfix').should('exist');
+    cy.get('@bugfixAssistantMessage').should('contain', 'Please try restarting');
+    cy.get('@sprintAssistantMessage').should('contain', 'Sure thing');
   });
 
   it('navigates to the Build RAG page and triggers an index build', () => {
+    // Arrange
     stubTopicList([]);
-
     cy.intercept('POST', `${apiUrl}/code-qa/build-rag/`, (req) => {
       req.reply({ statusCode: 200, body: {} });
     }).as('buildRag');
 
+    // Act
     cy.visit('/');
     cy.get('[data-cy="build-rag-nav"]', { timeout: 10000 }).click();
-
     cy.url().should('include', '/build-rag');
     cy.get('[data-cy="root-input"]').type('/workspace/project');
     cy.get('[data-cy="launch-button"]').click();
 
+    // Assert
     cy.wait('@buildRag').its('request.body').should('deep.equal', { root: '/workspace/project' });
     cy.get('[data-cy="toast"]').should('be.visible').and('contain', 'RAG index build triggered.');
   });
