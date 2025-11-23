@@ -40,6 +40,14 @@ module.exports = function (config) {
       dir: require('path').join(__dirname, './coverage/ai-code-assistant-frontend'),
       subdir: '.',
       reporters: [{ type: 'html' }, { type: 'text-summary' }],
+      check: {
+        global: {
+          statements: 80,
+          branches: 80,
+          functions: 80,
+          lines: 80,
+        },
+      },
     },
     junitReporter: {
       outputDir: junitOutputDir,

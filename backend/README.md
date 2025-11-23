@@ -168,6 +168,18 @@ docker compose up --build
 
 ---
 
+## ✅ Tests & couverture
+
+Lancer les tests avec la couverture obligatoire (≥ 80 %) :
+
+```bash
+python manage.py test
+```
+
+Les rapports XML JUnit et `coverage.xml` sont générés dans `test-results/` et le build échoue automatiquement si le seuil est franchi.
+
+---
+
 ## 🛡️ Sécurité
 
 - Pas d’accès au système de fichiers via l’API.
