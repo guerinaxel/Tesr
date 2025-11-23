@@ -9,8 +9,8 @@
     </mat-card-header>
 
     <mat-card-content>
-      <div class="messages" #messagesContainer>
-        <div *ngIf="messages.length === 0" class="empty-state">
+      <div class="messages" #messagesContainer data-cy="messages">
+        <div *ngIf="messages.length === 0" class="empty-state" data-cy="empty-state">
           <mat-icon aria-hidden="true">chat_bubble_outline</mat-icon>
           <p>Commencez la conversation pour obtenir de l'aide sur votre projet.</p>
         </div>
@@ -47,11 +47,18 @@
           placeholder="Posez une question sur votre code..."
           [disabled]="isSending"
           (keydown.space)="onSpaceSend($event)"
+          data-cy="question-input"
         ></textarea>
         <mat-hint>Appuyez sur la barre d'espace pour envoyer directement.</mat-hint>
       </mat-form-field>
 
-      <button mat-flat-button color="primary" type="submit" [disabled]="isSending || !question.trim()">
+      <button
+        mat-flat-button
+        color="primary"
+        type="submit"
+        [disabled]="isSending || !question.trim()"
+        data-cy="send-button"
+      >
         <mat-progress-spinner
           *ngIf="isSending"
           mode="indeterminate"
