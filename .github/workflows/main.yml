@@ -47,6 +47,10 @@ jobs:
             --noinput \
             --settings=project.settings.dev
 
+      - name: Summarize backend test results
+        if: always()
+        run: python ../.github/utils/summarize_junit.py --results-dir test-results --heading "Backend Test Details"
+
       - name: Publish test results
         if: always() && hashFiles('backend/test-results/**/*.xml') != ''
         uses: EnricoMi/publish-unit-test-result-action@v2
@@ -95,6 +99,10 @@ jobs:
         run: |
           mkdir -p test-results
           npm run test:ci
+
+      - name: Summarize frontend test results
+        if: always()
+        run: python ../.github/utils/summarize_junit.py --results-dir test-results --heading "Frontend Test Details"
 
       - name: Publish test results
         if: always() && hashFiles('frontend/test-results/**/*.xml') != ''
