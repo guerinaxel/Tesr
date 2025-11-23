@@ -1,0 +1,26 @@
+@use '@angular/material' as mat;
+
+// Custom AI Assistant theme following Angular Material best practices.
+// Uses Material Design 3 design tokens and exposes system-level CSS variables
+// for use across the application styles.
+$ai-assistant-theme: mat.define-theme((
+  color: (
+    theme-type: light,
+    primary: mat.$cyan-palette,
+    secondary: mat.$blue-palette,
+    tertiary: mat.$orange-palette,
+    neutral: mat.$blue-grey-palette,
+  ),
+  typography: mat.define-typography-config((
+    font-family: 'Roboto', 'Helvetica Neue', Arial, sans-serif,
+  )),
+  density: 0,
+));
+
+@include mat.core();
+
+:root {
+  @include mat.system-level-colors($ai-assistant-theme);
+  @include mat.system-level-typography($ai-assistant-theme);
+  @include mat.all-component-themes($ai-assistant-theme);
+}
