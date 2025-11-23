@@ -59,7 +59,7 @@ jobs:
           check_run: false
 
       - name: Fail if tests failed
-        if: steps.backend_tests.conclusion == 'failure'
+        if: steps.backend_tests.outcome == 'failure'
         run: exit 1
 
   frontend:
@@ -113,5 +113,5 @@ jobs:
         run: npm run e2e
 
       - name: Fail if tests failed
-        if: steps.frontend_tests.conclusion == 'failure'
+        if: steps.frontend_tests.outcome == 'failure'
         run: exit 1
