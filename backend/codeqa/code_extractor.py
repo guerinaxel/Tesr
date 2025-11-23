@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
-from typing import Callable, Iterable, List
+from typing import Callable, Iterable, List, Optional
 
 from docx import Document
 from PyPDF2 import PdfReader
@@ -13,7 +14,51 @@ TEXT_EXTENSIONS = {".py", ".ts", ".tsx", ".js", ".jsx", ".html", ".scss", ".css"
 def extract_pdf_text(path: Path) -> str:
     reader = PdfReader(path)
     pages = [page.extract_text() or "" for page in reader.pages]
-    return "\n".join(filter(None, pages))
+    text = "\n".join(filter(None, pages))
+
+    if text:
+        return text
+
+    ocr_text = extract_pdf_ocr_text(path)
+    return ocr_text or text
+
+
+def extract_pdf_ocr_text(path: Path) -> str:
+    modules = load_optional_ocr_modules()
+    if modules is None:
+        return ""
+
+    convert_from_path, image_to_string = modules
+
+    try:
+        images = convert_from_path(str(path))
+    except Exception:
+        return ""
+
+    ocr_pages: list[str] = []
+    for image in images:
+        try:
+            page_text = image_to_string(image)
+        except Exception:
+            continue
+        page_text = page_text.strip()
+        if page_text:
+            ocr_pages.append(page_text)
+
+    return "\n".join(ocr_pages)
+
+
+def load_optional_ocr_modules() -> Optional[tuple[Callable[[str], List[object]], Callable[[object], str]]]:
+    pdf2image_spec = importlib.util.find_spec("pdf2image")
+    pytesseract_spec = importlib.util.find_spec("pytesseract")
+
+    if pdf2image_spec is None or pytesseract_spec is None:
+        return None
+
+    from pdf2image import convert_from_path
+    from pytesseract import image_to_string
+
+    return convert_from_path, image_to_string
 
 
 def extract_docx_text(path: Path) -> str:
