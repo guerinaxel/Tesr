@@ -1,0 +1,54 @@
+// Use the Angular Material package entry point so CLI build and Karma both
+// resolve palette helpers and mixins without needing node_modules-relative
+// paths.
+@use '@angular/material' as mat;
+
+// Custom AI Assistant theme following Angular Material best practices.
+// Uses Material Design 3 design tokens and exposes system-level CSS variables
+// for use across the application styles.
+$ai-primary: mat.m2-define-palette(mat.$m2-cyan-palette, 600);
+$ai-secondary: mat.m2-define-palette(mat.$m2-blue-palette);
+$ai-tertiary: mat.m2-define-palette(mat.$m2-orange-palette);
+$ai-neutral: mat.m2-define-palette(mat.$m2-blue-grey-palette);
+$ai-error: mat.m2-define-palette(mat.$m2-red-palette);
+
+$ai-assistant-theme: mat.m2-define-light-theme((
+  color: (
+    primary: $ai-primary,
+    accent: $ai-secondary,
+    warn: $ai-tertiary,
+  ),
+  typography: mat.m2-define-typography-config(),
+  density: 0,
+));
+
+@include mat.core();
+
+@include mat.all-component-themes($ai-assistant-theme);
+
+:root {
+  // Primary
+  --mat-sys-primary: #{mat.m2-get-color-from-palette($ai-primary, 600)};
+  --mat-sys-on-primary: #{mat.m2-get-contrast-color-from-palette($ai-primary, 600)};
+  --mat-sys-primary-container: #{mat.m2-get-color-from-palette($ai-primary, 100)};
+  --mat-sys-on-primary-container: #{mat.m2-get-contrast-color-from-palette($ai-primary, 100)};
+
+  // Secondary
+  --mat-sys-secondary: #{mat.m2-get-color-from-palette($ai-secondary, 600)};
+  --mat-sys-secondary-container: #{mat.m2-get-color-from-palette($ai-secondary, 50)};
+  --mat-sys-on-secondary-container: #{mat.m2-get-contrast-color-from-palette($ai-secondary, 50)};
+
+  // Surface / Neutral
+  --mat-sys-surface-container-lowest: #{mat.m2-get-color-from-palette($ai-neutral, 50)};
+  --mat-sys-surface-container-low: #{mat.m2-get-color-from-palette($ai-neutral, 100)};
+  --mat-sys-surface: #{mat.m2-get-color-from-palette($ai-neutral, 50)};
+  --mat-sys-outline: #{mat.m2-get-color-from-palette($ai-neutral, 400)};
+  --mat-sys-outline-variant: #{mat.m2-get-color-from-palette($ai-neutral, 200)};
+  --mat-sys-on-surface: #{mat.m2-get-contrast-color-from-palette($ai-neutral, 50)};
+  --mat-sys-on-surface-variant: #{mat.m2-get-color-from-palette($ai-neutral, 600)};
+
+  // Error
+  --mat-sys-error: #{mat.m2-get-color-from-palette($ai-error, 600)};
+  --mat-sys-error-container: #{mat.m2-get-color-from-palette($ai-error, 50)};
+  --mat-sys-on-error-container: #{mat.m2-get-contrast-color-from-palette($ai-error, 50)};
+}

@@ -1,7 +1,11 @@
 .chat-page {
   min-height: 100vh;
   padding: 1.5rem;
-  background: linear-gradient(135deg, #f6f9ff 0%, #f0f4fb 100%);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--mat-sys-primary) 8%, white) 0%,
+    color-mix(in srgb, var(--mat-sys-primary) 6%, var(--mat-sys-surface)) 100%
+  );
   display: flex;
   justify-content: center;
 }
@@ -12,12 +16,12 @@
   flex-direction: column;
   gap: 0.5rem;
   min-height: calc(100vh - 140px);
-  box-shadow: 0 10px 30px rgba(25, 118, 210, 0.12);
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--mat-sys-primary) 18%, transparent);
 }
 
 .chat-card__avatar {
-  background: #e3f2fd;
-  color: #0d47a1;
+  background: color-mix(in srgb, var(--mat-sys-primary) 15%, var(--mat-sys-surface));
+  color: var(--mat-sys-on-primary-container);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -38,14 +42,14 @@ mat-card-content {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  background: #f7f9fc;
+  background: var(--mat-sys-surface-container-low);
   border-radius: 12px;
-  border: 1px solid #e8ebf3;
+  border: 1px solid var(--mat-sys-outline-variant);
 }
 
 .empty-state {
   text-align: center;
-  color: #5f6b7a;
+  color: var(--mat-sys-on-surface-variant);
   display: grid;
   justify-items: center;
   gap: 0.5rem;
@@ -56,7 +60,7 @@ mat-card-content {
   font-size: 32px;
   height: 32px;
   width: 32px;
-  color: #9fb6d3;
+  color: var(--mat-sys-outline);
 }
 
 .message {
@@ -79,26 +83,30 @@ mat-card-content {
   align-items: flex-start;
   padding: 0.8rem 1rem;
   border-radius: 14px;
-  background: #fff;
+  background: var(--mat-sys-surface);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
-  border: 1px solid #e6e9f1;
-  color: #1f2933;
+  border: 1px solid var(--mat-sys-outline-variant);
+  color: var(--mat-sys-on-surface);
 }
 
 .message--user .message__bubble {
-  background: linear-gradient(135deg, #1976d2, #2196f3);
-  color: #fff;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--mat-sys-primary) 92%, var(--mat-sys-primary-container) 8%),
+    var(--mat-sys-primary)
+  );
+  color: var(--mat-sys-on-primary);
   border-color: transparent;
 }
 
 .message--assistant .message__bubble {
-  background: #ffffff;
+  background: var(--mat-sys-surface);
 }
 
 .message--error .message__bubble {
-  background: #fff3f3;
-  color: #b00020;
-  border-color: #ffd6d6;
+  background: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+  border-color: color-mix(in srgb, var(--mat-sys-error) 40%, transparent);
 }
 
 .message__icon {
@@ -147,5 +155,5 @@ mat-card-content {
 }
 
 .chat-input .mat-mdc-progress-spinner {
-  --mdc-circular-progress-active-indicator-color: #fff;
+  --mdc-circular-progress-active-indicator-color: var(--mat-sys-on-primary);
 }

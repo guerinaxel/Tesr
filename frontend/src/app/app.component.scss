@@ -1,7 +1,7 @@
 .app-shell {
   min-height: 100vh;
-  background: #eef2f7;
-  color: #0f172a;
+  background: var(--mat-sys-surface-container-lowest);
+  color: var(--mat-sys-on-surface);
 }
 
 .app-toolbar {
@@ -9,11 +9,11 @@
   top: 0;
   z-index: 10;
   padding-inline: 1rem;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--mat-sys-primary) 12%, transparent);
 }
 
 .app-toolbar button {
-  color: #fff;
+  color: var(--mat-sys-on-primary);
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
@@ -22,7 +22,11 @@
 }
 
 .app-toolbar button.active {
-  background: rgba(255, 255, 255, 0.16);
+  background: color-mix(
+    in srgb,
+    var(--mat-sys-on-primary) 16%,
+    transparent
+  );
 }
 
 .toolbar-spacer {
