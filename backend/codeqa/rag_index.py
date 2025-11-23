@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import faiss  # type: ignore
 import joblib
@@ -13,15 +13,39 @@ from sentence_transformers import SentenceTransformer
 class RagConfig:
     index_path: Path
     docs_path: Path
-    embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_model_name: str = "nomic-ai/nomic-embed-text-v1.5"
+    embedding_model_kwargs: Dict[str, Any] | None = None
 
 
 class RagIndex:
     def __init__(self, config: RagConfig) -> None:
         self._config = config
-        self._model = SentenceTransformer(config.embedding_model_name)
+        model_kwargs: Dict[str, Any] = config.embedding_model_kwargs or {}
+        if "nomic" in config.embedding_model_name and "trust_remote_code" not in model_kwargs:
+            model_kwargs["trust_remote_code"] = True
+
+        self._model = SentenceTransformer(config.embedding_model_name, **model_kwargs)
+        self._embedding_dim = self._model.get_sentence_embedding_dimension()
         self._index: faiss.IndexFlatIP | None = None
         self._docs: List[str] = []
+
+    def _ensure_data_dirs(self) -> None:
+        self._config.index_path.parent.mkdir(parents=True, exist_ok=True)
+        self._config.docs_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _save_index_and_docs(self, index: faiss.IndexFlatIP, docs: List[str]) -> None:
+        self._ensure_data_dirs()
+        faiss.write_index(index, str(self._config.index_path))
+        joblib.dump(docs, self._config.docs_path)
+
+    def _rebuild_index_from_docs(self, docs: List[str]) -> faiss.IndexFlatIP:
+        embeddings = self._model.encode(
+            docs, convert_to_numpy=True, normalize_embeddings=True
+        )
+        index = faiss.IndexFlatIP(embeddings.shape[1])
+        index.add(embeddings)
+        self._save_index_and_docs(index, docs)
+        return index
 
     def build_from_texts(self, texts: List[str]) -> None:
         if not texts:
@@ -35,21 +59,23 @@ class RagIndex:
         index = faiss.IndexFlatIP(dim)
         index.add(embeddings)
 
-        self._config.index_path.parent.mkdir(parents=True, exist_ok=True)
-        self._config.docs_path.parent.mkdir(parents=True, exist_ok=True)
-
-        faiss.write_index(index, str(self._config.index_path))
-        joblib.dump(texts, self._config.docs_path)
+        self._save_index_and_docs(index, texts)
 
         self._index = index
         self._docs = texts
 
     def load(self) -> None:
         try:
-            self._index = faiss.read_index(str(self._config.index_path))
-            self._docs = joblib.load(self._config.docs_path)
+            docs: List[str] = joblib.load(self._config.docs_path)
+            index = faiss.read_index(str(self._config.index_path))
         except Exception as exc:  # pragma: no cover - defensive path
             raise FileNotFoundError("RAG index or docs file is missing.") from exc
+
+        if index.d != self._embedding_dim:
+            index = self._rebuild_index_from_docs(docs)
+
+        self._index = index
+        self._docs = docs
 
     def search(self, query: str, k: int = 5) -> List[Tuple[str, float]]:
         if self._index is None or not self._docs:
