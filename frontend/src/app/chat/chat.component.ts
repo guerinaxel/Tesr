@@ -79,10 +79,6 @@ export class ChatComponent implements OnInit {
       return;
     }
 
-    if (!this.selectedTopicId) {
-      return;
-    }
-
     const text = this.question.trim();
     if (!text) {
       return;
