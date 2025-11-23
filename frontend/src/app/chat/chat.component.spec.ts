@@ -19,6 +19,9 @@ describe('ChatComponent', () => {
     fixture = TestBed.createComponent(ChatComponent);
     component = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);
+
+    component.topics = [{ id: 1, name: 'Default', message_count: 0 }];
+    component.selectedTopicId = 1;
   });
 
   afterEach(() => {
@@ -35,9 +38,13 @@ describe('ChatComponent', () => {
     expect(req.request.body).toEqual({
       question: 'Explain RAG',
       system_prompt: 'code expert',
+      topic_id: '1',
     });
 
     req.flush({ answer: 'Contextual explanation' });
+
+    const refreshReq = httpMock.expectOne(`${environment.apiUrl}/topics/1/`);
+    refreshReq.flush({ id: 1, name: 'Default', message_count: 2, messages: [] });
 
     expect(component.messages[0]).toEqual(
       jasmine.objectContaining({ from: 'user', content: 'Explain RAG' })
@@ -61,9 +68,13 @@ describe('ChatComponent', () => {
       question: 'Customise the system',
       system_prompt: 'custom',
       custom_prompt: 'You are concise',
+      topic_id: '1',
     });
 
     req.flush({ answer: 'Acknowledged' });
+
+    const refreshReq = httpMock.expectOne(`${environment.apiUrl}/topics/1/`);
+    refreshReq.flush({ id: 1, name: 'Default', message_count: 2, messages: [] });
   });
 
   it('sends the message when pressing ctrl+space with content', () => {
@@ -75,6 +86,9 @@ describe('ChatComponent', () => {
 
     const req = httpMock.expectOne(`${environment.apiUrl}/code-qa/`);
     req.flush({ answer: 'Delivered' });
+
+    const refreshReq = httpMock.expectOne(`${environment.apiUrl}/topics/1/`);
+    refreshReq.flush({ id: 1, name: 'Default', message_count: 2, messages: [] });
 
     expect(component.messages[0]).toEqual(
       jasmine.objectContaining({ from: 'user', content: 'Quick send' })
@@ -129,4 +143,26 @@ describe('ChatComponent', () => {
     tick(200);
     expect(component.isSending).toBeFalse();
   }));
+
+  it('creates a new topic and loads it', () => {
+    component.newTopicName = 'Feature A';
+
+    component.createTopic();
+
+    const req = httpMock.expectOne(`${environment.apiUrl}/topics/`);
+    expect(req.request.method).toBe('POST');
+    req.flush({
+      id: 2,
+      name: 'Feature A',
+      message_count: 0,
+      messages: [],
+    });
+
+    const detailReq = httpMock.expectOne(`${environment.apiUrl}/topics/2/`);
+    detailReq.flush({ id: 2, name: 'Feature A', message_count: 0, messages: [] });
+
+    expect(component.topics.length).toBe(2);
+    expect(component.selectedTopicId).toBe(2);
+    expect(component.messages.length).toBe(0);
+  });
 });

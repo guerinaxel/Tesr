@@ -20,3 +20,8 @@ class CodeQuestionSerializerTests(SimpleTestCase):
         serializer = CodeQuestionSerializer(data={"question": "ok", "top_k": 25})
         self.assertFalse(serializer.is_valid())
         self.assertIn("top_k", serializer.errors)
+
+    def test_rejects_invalid_topic_id(self) -> None:
+        serializer = CodeQuestionSerializer(data={"question": "ok", "topic_id": 0})
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("topic_id", serializer.errors)

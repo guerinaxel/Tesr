@@ -35,6 +35,12 @@ class CodeQuestionSerializer(serializers.Serializer):
         max_value=20,
         default=5,
     )
+    topic_id = serializers.IntegerField(
+        required=False,
+        min_value=1,
+        allow_null=True,
+        default=None,
+    )
 
     def validate(self, attrs: dict) -> dict:
         system_prompt = attrs.get("system_prompt")
@@ -52,6 +58,14 @@ class CodeQuestionSerializer(serializers.Serializer):
             attrs["custom_prompt"] = custom_prompt.strip()
 
         return attrs
+
+
+class TopicCreateSerializer(serializers.Serializer):
+    name = serializers.CharField(
+        max_length=200,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
 
 
 class BuildRagRequestSerializer(serializers.Serializer):
