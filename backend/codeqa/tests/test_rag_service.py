@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import sys
 import types
+import os
 from types import SimpleNamespace
 
 from django.test import SimpleTestCase
@@ -48,3 +49,46 @@ class RagServiceTests(SimpleTestCase):
 
         with self.assertRaises(self.rag_service.AnswerNotReadyError):
             self.rag_service.answer_question("Missing")
+
+    def test_document_expert_uses_qwen_model(self) -> None:
+        class FakeIndex:
+            def search(self, query: str, k: int):
+                return [(f"snippet for {query}", 0.42)]
+
+        self.rag_service._rag_index = FakeIndex()
+
+        answer, _meta = self.rag_service.answer_question(
+            "Doc?", system_prompt="document expert"
+        )
+
+        self.assertIn("qwen2.5vl:7b", answer)
+
+    def test_document_expert_falls_back_when_primary_fails(self) -> None:
+        class FakeIndex:
+            def search(self, query: str, k: int):
+                return [(f"snippet for {query}", 0.42)]
+
+        self.rag_service._rag_index = FakeIndex()
+
+        os.environ["OLLAMA_DOC_MODEL_NAME"] = "primary-model"
+        os.environ["OLLAMA_DOC_MODEL_FALLBACK"] = "fallback-model"
+
+        original_chat = self.rag_service.chat
+
+        def flaky_chat(model, messages, **_kwargs):  # type: ignore[override]
+            if model == "primary-model":
+                raise RuntimeError("primary failed")
+            return SimpleNamespace(message=SimpleNamespace(content=f"answer from {model}"))
+
+        self.rag_service.chat = flaky_chat
+
+        try:
+            answer, _meta = self.rag_service.answer_question(
+                "Doc?", system_prompt="document expert"
+            )
+        finally:
+            self.rag_service.chat = original_chat
+            os.environ.pop("OLLAMA_DOC_MODEL_NAME", None)
+            os.environ.pop("OLLAMA_DOC_MODEL_FALLBACK", None)
+
+        self.assertIn("fallback-model", answer)

@@ -21,3 +21,4 @@ frontend/.angular/
 /backend/db.sqlite3
 /backend/codeqa/data/rag_docs.pkl
 /backend/codeqa/data/rag_index.faiss
+backend/test-results/

@@ -96,19 +96,34 @@ def answer_question(
         "Answer in clear, concise terms."
     )
 
-    model_name = os.getenv("OLLAMA_MODEL_NAME", "llama3.1:8b")
+    def _select_model(choice: str) -> tuple[str, str | None]:
+        if choice == "document expert":
+            primary = os.getenv("OLLAMA_DOC_MODEL_NAME", "qwen2.5vl:7b")
+            fallback = os.getenv("OLLAMA_DOC_MODEL_FALLBACK", "qwen2.5-vl:3b")
+            return primary, fallback
+        return os.getenv("OLLAMA_MODEL_NAME", "llama3.1:8b"), None
 
-    response: ChatResponse = chat(
-        model=model_name,
-        messages=[
-            {"role": "system", "content": selected_prompt},
-            {"role": "user", "content": user_content},
-        ],
-        options={
-            "num_ctx": 2048,
-            "use_gpu": True
-        }
-    )
+    def _run_chat(model: str) -> ChatResponse:
+        return chat(
+            model=model,
+            messages=[
+                {"role": "system", "content": selected_prompt},
+                {"role": "user", "content": user_content},
+            ],
+            options={
+                "num_ctx": 2048,
+                "use_gpu": True,
+            },
+        )
+
+    model_name, fallback_model = _select_model(prompt_choice)
+
+    try:
+        response: ChatResponse = _run_chat(model_name)
+    except Exception:
+        if fallback_model is None:
+            raise
+        response = _run_chat(fallback_model)
 
     answer = response.message.content
     meta = {
