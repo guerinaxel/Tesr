@@ -112,17 +112,34 @@ mat-card-content {
 }
 
 .chat-input {
-  display: flex;
-  gap: 0.75rem;
-  align-items: flex-end;
   padding: 0 1rem 1rem;
 }
 
-.chat-input__field {
-  flex: 1;
+.chat-input__row {
+  display: grid;
+  grid-template-columns: minmax(200px, 240px) 1fr auto;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.chat-input__message-area {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.chat-input__field,
+.chat-input__custom {
+  width: 100%;
+}
+
+.chat-input__system-prompt {
+  min-width: 200px;
 }
 
 .chat-input button {
+  height: fit-content;
+  align-self: flex-end;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;

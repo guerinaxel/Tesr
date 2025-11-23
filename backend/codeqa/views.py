@@ -22,9 +22,17 @@ class CodeQAView(APIView):
 
         question: str = serializer.validated_data["question"]
         top_k: int = serializer.validated_data["top_k"]
+        system_prompt: str = serializer.validated_data["system_prompt"]
+        custom_prompt: str | None = serializer.validated_data.get("custom_prompt")
+        typo_prompt: str | None = serializer.validated_data.get("custom_pront")
 
         try:
-            answer, meta = rag_service.answer_question(question=question, top_k=top_k)
+            answer, meta = rag_service.answer_question(
+                question=question,
+                top_k=top_k,
+                system_prompt=system_prompt,
+                custom_prompt=custom_prompt or typo_prompt,
+            )
         except rag_service.AnswerNotReadyError as exc:
             return Response(
                 {"detail": str(exc)},
