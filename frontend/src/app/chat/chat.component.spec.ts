@@ -56,6 +56,15 @@ describe('ChatComponent', () => {
     expect(component.isSending()).toBeFalse();
   }));
 
+  it('ignores submits while already sending', () => {
+    component.question.set('Already sending');
+    component.isSending.set(true);
+
+    component.onSubmit();
+
+    expect(chatDataService.sendQuestion).not.toHaveBeenCalled();
+  });
+
   it('sends a custom prompt when selected', () => {
     component.question.set('Customise the system');
     component.systemPrompt.set('custom');
@@ -104,6 +113,16 @@ describe('ChatComponent', () => {
     expect(chatDataService.sendQuestion).not.toHaveBeenCalled();
     expect(component.messages().length).toBe(0);
     expect(component.isSending()).toBeFalse();
+  });
+
+  it('does not send on keyboard shortcut when the message is empty', () => {
+    component.question.set('   ');
+
+    component.onSpaceSend(
+      new KeyboardEvent('keydown', { key: ' ', ctrlKey: true })
+    );
+
+    expect(chatDataService.sendQuestion).not.toHaveBeenCalled();
   });
 
   it('does not send when custom prompt is missing', () => {
@@ -171,6 +190,31 @@ describe('ChatComponent', () => {
     expect(component.messages().length).toBe(0);
   });
 
+  it('ignores topic creation when name is blank', () => {
+    component.newTopicName.set('   ');
+
+    component.createTopic();
+
+    expect(chatDataService.createTopic).not.toHaveBeenCalled();
+  });
+
+  it('refreshes topic metadata and ignores null topic ids', () => {
+    const getTopicDetailSpy = chatDataService.getTopicDetail.and.returnValue(
+      of({ id: 1, name: 'Updated', message_count: 5, messages: [] })
+    );
+
+    component.topics.set([{ id: 1, name: 'Default', message_count: 1 }]);
+    component['refreshTopicMetadata'](null);
+    expect(getTopicDetailSpy).not.toHaveBeenCalled();
+
+    component['refreshTopicMetadata'](1);
+
+    expect(getTopicDetailSpy).toHaveBeenCalledWith(1);
+    expect(component.topics()[0]).toEqual(
+      jasmine.objectContaining({ name: 'Updated', message_count: 5 })
+    );
+  });
+
   it('loads topics from the API and selects the most recent when none is chosen', () => {
     component.selectedTopicId.set(null);
 
@@ -204,6 +248,20 @@ describe('ChatComponent', () => {
     expect(component.topics().map((t) => t.id)).toEqual([5, 6]);
   });
 
+  it('selects a requested topic when provided', () => {
+    chatDataService.getTopics.and.returnValue(
+      of({ topics: [{ id: 3, name: 'Requested', message_count: 1 }] })
+    );
+    chatDataService.getTopicDetail.and.returnValue(
+      of({ id: 3, name: 'Requested', message_count: 1, messages: [] })
+    );
+
+    component.loadTopics(3);
+
+    expect(component.selectedTopicId()).toBe(3);
+    expect(chatDataService.getTopicDetail).toHaveBeenCalledWith(3);
+  });
+
   it('allows switching to another topic and loads its history', () => {
     component.topics.set([
       { id: 1, name: 'Default', message_count: 0 },
@@ -229,5 +287,79 @@ describe('ChatComponent', () => {
     expect(component.messages()[1]).toEqual(
       jasmine.objectContaining({ from: 'assistant', content: 'Answer' })
     );
+  });
+
+  it('does not reload the same topic unless forced', () => {
+    component.topics.set([
+      { id: 1, name: 'Default', message_count: 0 },
+      { id: 2, name: 'Follow-up', message_count: 2 },
+    ]);
+
+    component.selectedTopicId.set(2);
+    component.selectTopic(2);
+
+    expect(chatDataService.getTopicDetail).not.toHaveBeenCalled();
+
+    chatDataService.getTopicDetail.and.returnValue(
+      of({ id: 2, name: 'Follow-up', message_count: 2, messages: [] })
+    );
+
+    component.selectTopic(2, true);
+
+    expect(chatDataService.getTopicDetail).toHaveBeenCalledWith(2);
+  });
+
+  it('clears messages when topic detail fails to load', () => {
+    component.selectedTopicId.set(1);
+    component.messages.set([
+      { id: 1, from: 'user', content: 'Question' },
+      { id: 2, from: 'assistant', content: 'Answer' },
+    ]);
+
+    chatDataService.getTopicDetail.and.returnValue(
+      throwError(() => new Error('Nope'))
+    );
+
+    component.selectTopic(1, true);
+
+    expect(component.messages().length).toBe(0);
+  });
+
+  it('sends on ctrl+space or meta+space but not while sending', () => {
+    component.question.set('Meta send');
+    chatDataService.sendQuestion.and.returnValue(of({ answer: 'done' }));
+    chatDataService.getTopicDetail.and.returnValue(
+      of({ id: 1, name: 'Default', message_count: 0, messages: [] })
+    );
+
+    component.onSpaceSend(
+      new KeyboardEvent('keydown', { key: ' ', metaKey: true })
+    );
+
+    expect(chatDataService.sendQuestion).toHaveBeenCalledTimes(1);
+
+    component.isSending.set(true);
+    component.question.set('Blocked');
+
+    component.onSpaceSend(
+      new KeyboardEvent('keydown', { key: ' ', ctrlKey: true })
+    );
+
+    expect(chatDataService.sendQuestion).toHaveBeenCalledTimes(1);
+  });
+
+  it('handles topic load failures gracefully', () => {
+    component.topics.set([
+      { id: 1, name: 'Default', message_count: 0 },
+      { id: 2, name: 'Follow-up', message_count: 2 },
+    ]);
+
+    chatDataService.getTopics.and.returnValue(throwError(() => new Error('fail')));
+
+    component.loadTopics();
+
+    expect(component.topics().length).toBe(0);
+    expect(component.selectedTopicId()).toBeNull();
+    expect(component.messages().length).toBe(0);
   });
 });

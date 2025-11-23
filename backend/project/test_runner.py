@@ -42,7 +42,9 @@ class CoverageXMLTestRunner(XMLTestRunner):
         if total_coverage < COVERAGE_FAIL_UNDER:
             shortfall = COVERAGE_FAIL_UNDER - total_coverage
             print(
-                f"ERROR: Coverage {total_coverage:.2f}% is below the required {COVERAGE_FAIL_UNDER:.0f}% (short by {shortfall:.2f}%)."
+                "ERROR: Coverage "
+                f"{total_coverage:.2f}% is below the required {COVERAGE_FAIL_UNDER:.0f}% "
+                f"(short by {shortfall:.2f}%)."
             )
             failures += 1
 
