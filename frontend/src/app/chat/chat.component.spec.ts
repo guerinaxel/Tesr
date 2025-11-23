@@ -16,6 +16,7 @@ describe('ChatComponent', () => {
       'ChatDataService',
       ['sendQuestion', 'getTopics', 'getTopicDetail', 'createTopic', 'rebuildIndex']
     );
+    chatDataService.getTopics.and.returnValue(of({ topics: [] }));
 
     await TestBed.configureTestingModule({
       imports: [ChatComponent, NoopAnimationsModule],
@@ -27,6 +28,10 @@ describe('ChatComponent', () => {
 
     component.topics.set([{ id: 1, name: 'Default', message_count: 0 }]);
     component.selectedTopicId.set(1);
+  });
+
+  afterEach(() => {
+    localStorage.clear();
   });
 
   it('sends a question to the backend and appends the assistant answer', fakeAsync(() => {
@@ -374,6 +379,7 @@ describe('ChatComponent', () => {
     expect(chatDataService.rebuildIndex).toHaveBeenCalledWith('4');
     expect(component.rebuildFeedback()).toContain('succès');
     expect(component.isRebuilding()).toBeFalse();
+    expect(localStorage.getItem('chat.rebuildRoot')).toBe('4');
   });
 
   it('rebuilds the index using a stored root when no topic is selected', () => {
@@ -386,5 +392,20 @@ describe('ChatComponent', () => {
 
     expect(chatDataService.rebuildIndex).toHaveBeenCalledWith('my/repo');
     expect(component.rebuildFeedback()).toBe('Index reconstruit avec succès.');
+    expect(localStorage.getItem('chat.rebuildRoot')).toBe('my/repo');
+  });
+
+  it('uses the previously saved rebuild root when nothing is provided', () => {
+    localStorage.setItem('chat.rebuildRoot', 'stored/root');
+    chatDataService.rebuildIndex.and.returnValue(of({}));
+
+    component.selectedTopicId.set(null);
+    component.rebuildRoot.set('');
+
+    component.ngOnInit();
+    component.rebuildIndex();
+
+    expect(chatDataService.rebuildIndex).toHaveBeenCalledWith('stored/root');
+    expect(component.rebuildRoot()).toBe('stored/root');
   });
 });

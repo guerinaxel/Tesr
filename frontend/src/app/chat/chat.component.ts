@@ -80,6 +80,7 @@ export class ChatComponent implements OnInit {
   private pendingTopicSelection: number | null = null;
   private nextId = 1;
   private lastUsedRoot: string | null = null;
+  private readonly rebuildRootStorageKey = 'chat.rebuildRoot';
 
   readonly hasTopics = computed(() => this.topics().length > 0);
   readonly hasMessages = computed(() => this.messages().length > 0);
@@ -94,6 +95,7 @@ export class ChatComponent implements OnInit {
   );
 
   ngOnInit(): void {
+    this.restoreRebuildRoot();
     this.loadTopics(this.initialTopicId());
   }
 
@@ -282,8 +284,7 @@ export class ChatComponent implements OnInit {
     this.chatDataService.rebuildIndex(root ?? undefined).subscribe({
       next: () => {
         if (root) {
-          this.lastUsedRoot = root;
-          this.rebuildRoot.set(root);
+          this.persistRebuildRoot(root);
         }
 
         this.rebuildHasError.set(false);
@@ -312,6 +313,20 @@ export class ChatComponent implements OnInit {
     }
 
     return this.lastUsedRoot;
+  }
+
+  private restoreRebuildRoot(): void {
+    const savedRoot = localStorage.getItem(this.rebuildRootStorageKey);
+    if (!savedRoot) return;
+
+    this.lastUsedRoot = savedRoot;
+    this.rebuildRoot.set(savedRoot);
+  }
+
+  private persistRebuildRoot(root: string): void {
+    this.lastUsedRoot = root;
+    this.rebuildRoot.set(root);
+    localStorage.setItem(this.rebuildRootStorageKey, root);
   }
 
   private refreshTopicMetadata(topicId: number | null): void {
