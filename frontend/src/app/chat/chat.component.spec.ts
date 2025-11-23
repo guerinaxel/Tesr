@@ -1,5 +1,5 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 
 import { environment } from '../../environments/environment';
@@ -25,7 +25,7 @@ describe('ChatComponent', () => {
     httpMock.verify();
   });
 
-  it('sends a question to the backend and appends the assistant answer', () => {
+  it('sends a question to the backend and appends the assistant answer', fakeAsync(() => {
     component.question = 'Explain RAG';
 
     component.onSubmit();
@@ -42,8 +42,9 @@ describe('ChatComponent', () => {
     expect(component.messages[1]).toEqual(
       jasmine.objectContaining({ from: 'assistant', content: 'Contextual explanation' })
     );
+    tick(200);
     expect(component.isSending).toBeFalse();
-  });
+  }));
 
   it('sends the message when pressing ctrl+space with content', () => {
     component.question = 'Quick send';
@@ -83,7 +84,7 @@ describe('ChatComponent', () => {
     expect(component.isSending).toBeFalse();
   });
 
-  it('shows an error message when the API call fails', () => {
+  it('shows an error message when the API call fails', fakeAsync(() => {
     component.question = 'Trigger error';
 
     component.onSubmit();
@@ -93,6 +94,7 @@ describe('ChatComponent', () => {
     const errorMessage = component.messages[component.messages.length - 1];
     expect(errorMessage?.isError).toBeTrue();
     expect(errorMessage?.content).toContain('Service unavailable');
+    tick(200);
     expect(component.isSending).toBeFalse();
-  });
+  }));
 });
