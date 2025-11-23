@@ -9,6 +9,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSelectModule } from '@angular/material/select';
 
 import { environment } from '../../environments/environment';
 
@@ -37,6 +38,7 @@ interface CodeQaResponse {
     MatIconModule,
     MatInputModule,
     MatProgressSpinnerModule,
+    MatSelectModule,
   ],
   templateUrl: './chat.component.html',
   styleUrls: ['./chat.component.scss'],
@@ -48,12 +50,22 @@ export class ChatComponent {
 
   messages: ChatMessage[] = [];
   question = '';
+  systemPrompt: 'code expert' | 'document expert' | 'custom' = 'code expert';
+  customPrompt = '';
   isSending = false;
   private nextId = 1;
 
   onSubmit(): void {
+    if (this.isSending) {
+      return;
+    }
+
     const text = this.question.trim();
-    if (!text || this.isSending) {
+    if (!text) {
+      return;
+    }
+
+    if (this.systemPrompt === 'custom' && !this.customPrompt.trim()) {
       return;
     }
 
@@ -67,8 +79,17 @@ export class ChatComponent {
     this.isSending = true;
     this.scrollToBottom();
 
+    const payload: Record<string, string> = {
+      question: text,
+      system_prompt: this.systemPrompt,
+    };
+
+    if (this.systemPrompt === 'custom') {
+      payload.custom_prompt = this.customPrompt.trim();
+    }
+
     this.http
-      .post<CodeQaResponse>(`${environment.apiUrl}/code-qa/`, { question: text })
+      .post<CodeQaResponse>(`${environment.apiUrl}/code-qa/`, payload)
       .subscribe({
         next: (res) => {
           const aiMsg: ChatMessage = {

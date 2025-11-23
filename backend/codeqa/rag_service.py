@@ -36,50 +36,54 @@ def get_rag_index() -> RagIndex:
     return _rag_index
 
 
-def answer_question(question: str, top_k: int = 5) -> Tuple[str, Dict]:
+def answer_question(
+    question: str,
+    top_k: int = 5,
+    system_prompt: str | None = None,
+    custom_prompt: str | None = None,
+) -> Tuple[str, Dict]:
     index = get_rag_index()
     contexts = index.search(question, k=top_k)
 
     if not contexts:
         raise AnswerNotReadyError("RAG index is empty or not initialized.")
 
-    system_prompt = (
-        # # "You are an assistant that answers questions about this codebase. "
-        # # "Use ONLY the provided context when you are unsure. "
-        # # "If the answer is not in the context, say you don't know."
-        # "You are a senior software engineer acting as a codebase assistant."
-        # "Your only source of truth is the code snippets and project context provided to you in the conversation."
-        # "Follow these rules:"
-        # "1. Base every answer strictly on the retrieved code context."
-        # "2. If information is missing or unclear, say that you cannot verify it."
-        # "3. When the user asks about behavior, APIs, or architecture, cite the specific lines or files from the context in natural language (do NOT fabricate)."
-        # "4. Avoid assumptions, speculations, or inferred code that does not appear in the provided context."
-        # "5. When code is unclear or ambiguous, explain the ambiguity explicitly."
-        # "6. Summarize cross-file relationships only if they appear in the retrieved context."
-        # "7. Provide explanations step-by-step and highlight important logic paths."
-        # "8. Suggest improvements only when supported by the context."
-        # "9. Never invent classes, functions, variables, or configurations that do not exist in the supplied context."
-        # "10. If the user asks for something outside the provided context, warn them and answer only what can be verified."
-        # "Your goal is to give accurate, safe, and non-hallucinated explanations about the codebase using only the information retrieved for this query."
-        "You are a senior Python/Django expert assistant with access to a retrieval system that can search the entire codebase."
-        "If the provided context is not sufficient to answer the question, DO NOT tell the user that you cannot verify it."
-        "Instead, explicitly request more context by stating:"
-        "request: more_context needed: <describe what you need>"
-        "Only use this format when the available context is insufficient."
-        "When enough context is provided, answer with a complete, expert-level Django/Python explanation:"
-        "- Reference functions, classes, files, and logic accurately."
-        "- Do not hallucinate code, but you may infer relationships that are normal within Django projects."
-        "- Prefer architecture-level reasoning (views → serializers → models → services)."
-        "- Use Django 5 and DRF best practices for all explanations."
-        "- Always give precise, actionable, senior-level insight."
-        "Your behavior model:"
-        "- If context is insufficient → ask the retriever for specific missing parts."
-        "- If context is sufficient → answer fully."
-        "- Never force the user to ask a second time."
-        "- Never stop at “I cannot verify this”."
-        "- You may request context repeatedly until you have enough to answer confidently."
-        "Use this protocol for every question."
-    )
+    system_prompt_mapping = {
+        "code expert": (
+            "You are a senior Python/Django expert assistant with access to a retrieval system that can search the entire codebase."
+            "If the provided context is not sufficient to answer the question, DO NOT tell the user that you cannot verify it."
+            "Instead, explicitly request more context by stating:"
+            "request: more_context needed: <describe what you need>"
+            "Only use this format when the available context is insufficient."
+            "When enough context is provided, answer with a complete, expert-level Django/Python explanation:"
+            "- Reference functions, classes, files, and logic accurately."
+            "- Do not hallucinate code, but you may infer relationships that are normal within Django projects."
+            "- Prefer architecture-level reasoning (views → serializers → models → services)."
+            "- Use Django 5 and DRF best practices for all explanations."
+            "- Always give precise, actionable, senior-level insight."
+            "Your behavior model:"
+            "- If context is insufficient → ask the retriever for specific missing parts."
+            "- If context is sufficient → answer fully."
+            "- Never force the user to ask a second time."
+            "- Never stop at “I cannot verify this”."
+            "- You may request context repeatedly until you have enough to answer confidently."
+            "Use this protocol for every question."
+        ),
+        "document expert": (
+            "You are a technical documentation expert."
+            "Provide clear, concise, and well-structured explanations based solely on the supplied context."
+            "When code is referenced, summarize behavior in documentation style and call out missing details that may require more context."
+            "Always keep responses actionable, accurate, and easy to follow for engineering teams."
+        ),
+    }
+
+    prompt_choice = system_prompt or "code expert"
+    if prompt_choice == "custom":
+        if not custom_prompt or not custom_prompt.strip():
+            raise ValueError("custom_prompt is required when system_prompt is 'custom'")
+        selected_prompt = custom_prompt.strip()
+    else:
+        selected_prompt = system_prompt_mapping.get(prompt_choice, system_prompt_mapping["code expert"])
 
     context_text = "\n\n".join(
         f"[Doc {i+1}, score={score:.3f}]\n{snippet}"
@@ -97,7 +101,7 @@ def answer_question(question: str, top_k: int = 5) -> Tuple[str, Dict]:
     response: ChatResponse = chat(
         model=model_name,
         messages=[
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": selected_prompt},
             {"role": "user", "content": user_content},
         ],
         options={

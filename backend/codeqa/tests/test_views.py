@@ -18,7 +18,7 @@ sys.modules["sentence_transformers"] = types.SimpleNamespace(
 sys.modules["joblib"] = types.SimpleNamespace(dump=lambda *_, **__: None, load=lambda *_: [])
 sys.modules["ollama"] = types.SimpleNamespace(
     ChatResponse=SimpleNamespace,
-    chat=lambda model, messages: SimpleNamespace(message=SimpleNamespace(content="ai")),
+    chat=lambda model, messages, **kwargs: SimpleNamespace(message=SimpleNamespace(content="ai")),
 )
 
 from codeqa import rag_index as rag_index_module
@@ -33,11 +33,15 @@ class CodeQAViewTests(SimpleTestCase):
         self.factory = APIRequestFactory()
 
     def test_post_returns_answer_payload(self) -> None:
-        def fake_answer_question(question: str, top_k: int):
-            return "answer text", {"num_contexts": 1}
+        def fake_answer_question(question: str, top_k: int, system_prompt: str, custom_prompt: str | None = None):
+            return "answer text", {"num_contexts": 1, "prompt": system_prompt, "custom": custom_prompt}
 
         rag_service_module.answer_question = fake_answer_question  # type: ignore[assignment]
-        request = self.factory.post("/api/code-qa/", {"question": "Hello?"}, format="json")
+        request = self.factory.post(
+            "/api/code-qa/",
+            {"question": "Hello?", "system_prompt": "code expert"},
+            format="json",
+        )
         view = CodeQAView.as_view()
 
         response = view(request)
@@ -45,9 +49,54 @@ class CodeQAViewTests(SimpleTestCase):
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertEqual("answer text", response.data["answer"])
         self.assertEqual(1, response.data["meta"]["num_contexts"])
+        self.assertEqual("code expert", response.data["meta"]["prompt"])
+        self.assertIsNone(response.data["meta"]["custom"])
+
+    def test_custom_prompt_is_forwarded(self) -> None:
+        captured: dict[str, str | None] = {}
+
+        def fake_answer_question(
+            question: str,
+            top_k: int,
+            system_prompt: str,
+            custom_prompt: str | None = None,
+        ):
+            captured.update(
+                {
+                    "question": question,
+                    "top_k": str(top_k),
+                    "system_prompt": system_prompt,
+                    "custom_prompt": custom_prompt,
+                }
+            )
+            return "answer text", {"num_contexts": 1}
+
+        rag_service_module.answer_question = fake_answer_question  # type: ignore[assignment]
+        request = self.factory.post(
+            "/api/code-qa/",
+            {"question": "Hi?", "system_prompt": "custom", "custom_prompt": "Act polite"},
+            format="json",
+        )
+
+        response = CodeQAView.as_view()(request)
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertEqual(
+            {
+                "question": "Hi?",
+                "top_k": "5",
+                "system_prompt": "custom",
+                "custom_prompt": "Act polite",
+            },
+            captured,
+        )
 
     def test_post_returns_503_when_index_missing(self) -> None:
-        request = self.factory.post("/api/code-qa/", {"question": "Hello?"}, format="json")
+        request = self.factory.post(
+            "/api/code-qa/",
+            {"question": "Hello?", "system_prompt": "code expert"},
+            format="json",
+        )
         view = CodeQAView.as_view()
 
         rag_service_module.answer_question = lambda *_args, **_kwargs: (_ for _ in ()).throw(  # type: ignore[assignment]
@@ -58,6 +107,18 @@ class CodeQAViewTests(SimpleTestCase):
 
         self.assertEqual(status.HTTP_503_SERVICE_UNAVAILABLE, response.status_code)
         self.assertIn("detail", response.data)
+
+    def test_requires_custom_prompt_when_needed(self) -> None:
+        request = self.factory.post(
+            "/api/code-qa/",
+            {"question": "Hello?", "system_prompt": "custom"},
+            format="json",
+        )
+
+        response = CodeQAView.as_view()(request)
+
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+        self.assertIn("custom_prompt", response.data)
 
 
 class HealthViewTests(SimpleTestCase):

@@ -32,7 +32,10 @@ describe('ChatComponent', () => {
 
     const req = httpMock.expectOne(`${environment.apiUrl}/code-qa/`);
     expect(req.request.method).toBe('POST');
-    expect(req.request.body).toEqual({ question: 'Explain RAG' });
+    expect(req.request.body).toEqual({
+      question: 'Explain RAG',
+      system_prompt: 'code expert',
+    });
 
     req.flush({ answer: 'Contextual explanation' });
 
@@ -45,6 +48,23 @@ describe('ChatComponent', () => {
     tick(200);
     expect(component.isSending).toBeFalse();
   }));
+
+  it('sends a custom prompt when selected', () => {
+    component.question = 'Customise the system';
+    component.systemPrompt = 'custom';
+    component.customPrompt = 'You are concise';
+
+    component.onSubmit();
+
+    const req = httpMock.expectOne(`${environment.apiUrl}/code-qa/`);
+    expect(req.request.body).toEqual({
+      question: 'Customise the system',
+      system_prompt: 'custom',
+      custom_prompt: 'You are concise',
+    });
+
+    req.flush({ answer: 'Acknowledged' });
+  });
 
   it('sends the message when pressing ctrl+space with content', () => {
     component.question = 'Quick send';
@@ -68,6 +88,18 @@ describe('ChatComponent', () => {
     component.question = 'Should stay';
 
     component.onSpaceSend(new KeyboardEvent('keydown', { key: ' ' }));
+
+    httpMock.expectNone(`${environment.apiUrl}/code-qa/`);
+    expect(component.messages.length).toBe(0);
+    expect(component.isSending).toBeFalse();
+  });
+
+  it('does not send when custom prompt is missing', () => {
+    component.question = 'Should block';
+    component.systemPrompt = 'custom';
+    component.customPrompt = '   ';
+
+    component.onSubmit();
 
     httpMock.expectNone(`${environment.apiUrl}/code-qa/`);
     expect(component.messages.length).toBe(0);
