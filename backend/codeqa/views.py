@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from io import StringIO
+import inspect
 from typing import Any
 
 from django.http import HttpRequest
@@ -39,14 +40,22 @@ class CodeQAView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        answer_kwargs: dict[str, Any] = {
+            "question": question,
+            "top_k": top_k,
+            "system_prompt": system_prompt,
+            "custom_prompt": custom_prompt or typo_prompt,
+        }
+
+        signature = inspect.signature(rag_service.answer_question)
+        if "fusion_weight" in signature.parameters or any(
+            param.kind == inspect.Parameter.VAR_KEYWORD
+            for param in signature.parameters.values()
+        ):
+            answer_kwargs["fusion_weight"] = fusion_weight
+
         try:
-            answer, meta = rag_service.answer_question(
-                question=question,
-                top_k=top_k,
-                fusion_weight=fusion_weight,
-                system_prompt=system_prompt,
-                custom_prompt=custom_prompt or typo_prompt,
-            )
+            answer, meta = rag_service.answer_question(**answer_kwargs)
         except rag_service.AnswerNotReadyError as exc:
             return Response(
                 {"detail": str(exc)},
