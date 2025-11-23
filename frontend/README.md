@@ -1,4 +1,4 @@
-# AI Code Assistant – Frontend (Angular 19)
+# AI Code Assistant – Frontend (Angular 20)
 
 Ce frontend Angular offre une interface de chat moderne permettant
 d’interroger le backend Django / RAG.  
@@ -9,7 +9,7 @@ Il s’agit d’un composant standalone simple, extensible et responsive.
 ## ✨ Fonctionnalités
 
 - UI de chat minimaliste mais extensible.
-- Composants Angular standalone (Angular 16+).
+- Composants Angular standalone (Angular 20).
 - Envoi de requêtes vers `/api/code-qa/`.
 - Gestion du flux dialogué (messages utilisateur / IA).
 - SCSS responsive.
@@ -40,7 +40,7 @@ frontend/
 
 ## 📦 Dépendances
 
-- Angular 19
+- Angular 20
 - RxJS
 - TypeScript
 - SCSS
