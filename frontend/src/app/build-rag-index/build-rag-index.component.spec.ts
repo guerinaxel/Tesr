@@ -1,5 +1,6 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 
 import { environment } from '../../environments/environment';
 import { BuildRagIndexComponent } from './build-rag-index.component';
@@ -11,7 +12,7 @@ describe('BuildRagIndexComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [BuildRagIndexComponent, HttpClientTestingModule],
+      imports: [BuildRagIndexComponent, HttpClientTestingModule, NoopAnimationsModule],
     }).compileComponents();
 
     fixture = TestBed.createComponent(BuildRagIndexComponent);

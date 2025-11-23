@@ -1,5 +1,6 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 
 import { environment } from '../../environments/environment';
 import { ChatComponent } from './chat.component';
@@ -12,7 +13,7 @@ describe('ChatComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [ChatComponent, HttpClientTestingModule],
+      imports: [ChatComponent, HttpClientTestingModule, NoopAnimationsModule],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ChatComponent);
@@ -42,6 +43,22 @@ describe('ChatComponent', () => {
       jasmine.objectContaining({ from: 'assistant', content: 'Contextual explanation' })
     );
     expect(component.isSending).toBeFalse();
+  });
+
+  it('sends the message when pressing space with content', () => {
+    component.question = 'Quick send';
+
+    component.onSpaceSend(new KeyboardEvent('keydown', { key: ' ' }));
+
+    const req = httpMock.expectOne(`${environment.apiUrl}/code-qa/`);
+    req.flush({ answer: 'Delivered' });
+
+    expect(component.messages[0]).toEqual(
+      jasmine.objectContaining({ from: 'user', content: 'Quick send' })
+    );
+    expect(component.messages[1]).toEqual(
+      jasmine.objectContaining({ from: 'assistant', content: 'Delivered' })
+    );
   });
 
   it('does not send a request for blank input', () => {

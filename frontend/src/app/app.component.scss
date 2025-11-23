@@ -1,23 +1,32 @@
-.app-nav {
-  display: flex;
-  gap: 1rem;
-  padding: 1rem;
-  background-color: #f6f7fb;
-  border-bottom: 1px solid #e5e5e5;
+.app-shell {
+  min-height: 100vh;
+  background: #eef2f7;
+  color: #0f172a;
 }
 
-.app-nav a {
-  color: #1f2933;
-  text-decoration: none;
-  font-weight: 600;
-  padding: 0.35rem 0.75rem;
-  border-radius: 6px;
+.app-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding-inline: 1rem;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.1);
 }
 
-.app-nav a.active,
-.app-nav a:hover {
-  background-color: #007aff;
+.app-toolbar button {
   color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  padding-inline: 1rem;
+}
+
+.app-toolbar button.active {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.toolbar-spacer {
+  flex: 1;
 }
 
 .app-main {

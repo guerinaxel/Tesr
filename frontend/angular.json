@@ -14,7 +14,9 @@
             "index": "src/index.html",
             "main": "src/main.ts",
             "polyfills": [],
-            "tsConfig": "tsconfig.app.json"
+            "tsConfig": "tsconfig.app.json",
+            "styles": ["src/styles.scss"],
+            "scripts": []
           }
         },
         "serve": {
@@ -31,7 +33,7 @@
             "tsConfig": "tsconfig.spec.json",
             "inlineStyleLanguage": "scss",
             "assets": [],
-            "styles": [],
+            "styles": ["src/styles.scss"],
             "scripts": []
           }
         }
