@@ -1,88 +1,75 @@
-const apiUrl = 'http://localhost:8000/api';
+import { BuildRagPage } from '../support/pageObjects/BuildRagPage';
+import { ChatPage } from '../support/pageObjects/ChatPage';
+import { TopicsPanel } from '../support/pageObjects/TopicsPanel';
+import {
+  stubBuildRag,
+  stubCreateTopic,
+  stubSendQuestion,
+  stubTopicDetail,
+  stubTopicList,
+} from '../support/utils/apiStubs';
 
-const stubTopicList = (topics: Array<{ id: number; name: string; message_count: number }>) => {
-  cy.intercept('GET', `${apiUrl}/topics/`, { topics }).as('listTopics');
-};
-
-const stubTopicDetail = (
-  topic: {
-    id: number;
-    name: string;
-    message_count: number;
-    messages: Array<{ role: 'user' | 'assistant'; content: string }>;
-  },
-  alias = 'topicDetail'
-) => {
-  cy.intercept('GET', `${apiUrl}/topics/${topic.id}/`, topic).as(alias);
-};
+const chatPage = new ChatPage();
+const topicsPanel = new TopicsPanel();
 
 describe('AI Code Assistant app', () => {
   it('sends a chat message and renders assistant reply', () => {
     stubTopicList([{ id: 1, name: 'Sprint 12', message_count: 0 }]);
     stubTopicDetail({ id: 1, name: 'Sprint 12', message_count: 0, messages: [] });
-
-    cy.intercept('POST', `${apiUrl}/code-qa/`, (req) => {
-      expect(req.body).to.deep.equal({
+    stubSendQuestion(
+      {
         question: 'Bonjour, aide-moi !',
         system_prompt: 'code expert',
         topic_id: '1',
-      });
+      },
+      { answer: 'Voici une réponse utile.' }
+    );
 
-      req.reply({
-        statusCode: 200,
-        body: { answer: 'Voici une réponse utile.' },
-      });
-    }).as('sendQuestion');
+    chatPage.visit();
+    topicsPanel.waitForTopicList().waitForTopicDetail();
 
-    cy.visit('/');
-    cy.wait('@listTopics');
-    cy.wait('@topicDetail');
+    chatPage.typeQuestion('Bonjour, aide-moi !').clickSend();
 
-    cy.get('[data-cy="question-input"]').type('Bonjour, aide-moi !');
-    cy.get('[data-cy="send-button"]').click();
-
-    cy.get('[data-cy="send-button"]').should('be.disabled');
+    chatPage.expectSendDisabled();
     cy.wait('@sendQuestion');
 
-    cy.get('[data-cy="send-button"]').should('not.be.disabled');
-    cy.get('.message--user .message__content').should('contain', 'Bonjour, aide-moi !');
-    cy.get('.message--assistant .message__content').should('contain', 'Voici une réponse utile.');
-    cy.get('[data-cy="messages"]').find('.message--assistant').should('have.length', 1);
+    chatPage
+      .expectSendEnabled()
+      .expectUserMessageContains('Bonjour, aide-moi !')
+      .expectAssistantMessageContains('Voici une réponse utile.')
+      .expectAssistantMessageCount(1);
   });
 
   it('allows selecting a custom system prompt and sends it to the API', () => {
     stubTopicList([{ id: 2, name: 'Docs', message_count: 0 }]);
     stubTopicDetail({ id: 2, name: 'Docs', message_count: 0, messages: [] });
-
-    cy.intercept('POST', `${apiUrl}/code-qa/`, (req) => {
-      expect(req.body).to.deep.equal({
+    stubSendQuestion(
+      {
         question: 'Salut, explique-moi ceci.',
         system_prompt: 'custom',
         custom_prompt: 'Parle en français',
         topic_id: '2',
-      });
+      },
+      { answer: 'Réponse sur mesure.' },
+      'sendCustom'
+    );
 
-      req.reply({ statusCode: 200, body: { answer: 'Réponse sur mesure.' } });
-    }).as('sendCustom');
+    chatPage.visit();
+    topicsPanel.waitForTopicList().waitForTopicDetail();
 
-    cy.visit('/');
-    cy.wait('@listTopics');
-    cy.wait('@topicDetail');
-
-    cy.get('[data-cy="system-prompt-select"]').click();
-    cy.get('mat-option').contains('custom').click();
-    cy.get('[data-cy="custom-prompt-input"]').should('be.visible').type('Parle en français');
-
-    cy.get('[data-cy="question-input"]').type('Salut, explique-moi ceci.');
-    cy.get('[data-cy="send-button"]').click();
+    chatPage
+      .selectSystemPrompt('custom')
+      .typeCustomPrompt('Parle en français')
+      .typeQuestion('Salut, explique-moi ceci.')
+      .clickSend();
 
     cy.wait('@sendCustom');
-    cy.get('.message--assistant .message__content').should('contain', 'Réponse sur mesure.');
+    chatPage.expectAssistantMessageContains('Réponse sur mesure.');
   });
 
   it('creates a new topic and shows its empty conversation state', () => {
     let listCall = 0;
-    cy.intercept('GET', `${apiUrl}/topics/`, (req) => {
+    cy.intercept('GET', 'http://localhost:8000/api/topics/', (req) => {
       listCall += 1;
       if (listCall === 1) {
         req.reply({ topics: [] });
@@ -91,26 +78,19 @@ describe('AI Code Assistant app', () => {
 
       req.reply({ topics: [{ id: 3, name: 'New thread', message_count: 0 }] });
     }).as('listTopics');
-    cy.intercept('POST', `${apiUrl}/topics/`, {
-      id: 3,
-      name: 'New thread',
-      message_count: 0,
-      messages: [],
-    }).as('createTopic');
+    stubCreateTopic({ id: 3, name: 'New thread', message_count: 0, messages: [] });
     stubTopicDetail({ id: 3, name: 'New thread', message_count: 0, messages: [] });
 
-    cy.visit('/');
-    cy.wait('@listTopics');
+    chatPage.visit();
+    topicsPanel.waitForTopicList();
 
-    cy.get('[data-cy="new-topic-input"]').type('New thread');
-    cy.get('[data-cy="create-topic-button"]').click();
+    topicsPanel.createTopic('New thread');
 
     cy.wait('@createTopic');
-    cy.wait('@topicDetail');
-    cy.wait('@listTopics');
+    topicsPanel.waitForTopicDetail().waitForTopicList();
 
-    cy.contains('[data-cy="topic-item"]', 'New thread').should('have.class', 'selected');
-    cy.get('[data-cy="empty-state"]').should('contain', 'Commencez la conversation');
+    topicsPanel.expectTopicSelected('New thread');
+    topicsPanel.expectEmptyState('Commencez la conversation');
   });
 
   it('lists multiple topics and loads their histories when switching', () => {
@@ -143,34 +123,30 @@ describe('AI Code Assistant app', () => {
       'sprintDetail'
     );
 
-    cy.visit('/');
-    cy.wait('@listTopics');
-    cy.wait('@bugfixDetail');
+    chatPage.visit();
+    topicsPanel.waitForTopicList();
+    topicsPanel.waitForTopicDetail('bugfixDetail');
 
-    cy.contains('[data-cy="topic-item"]', 'Sprint 12').should('exist');
-    cy.contains('[data-cy="topic-item"]', 'Bugfix').should('exist');
-    cy.get('.message--assistant .message__content').should('contain', 'Please try restarting');
+    topicsPanel.expectTopicExists('Sprint 12').expectTopicExists('Bugfix');
+    chatPage.expectAssistantMessageContains('Please try restarting');
 
-    cy.contains('[data-cy="topic-item"]', 'Sprint 12').click();
-    cy.wait('@sprintDetail');
-    cy.get('.message--assistant .message__content').should('contain', 'Sure thing');
+    topicsPanel.selectTopic('Sprint 12');
+    topicsPanel.waitForTopicDetail('sprintDetail');
+    chatPage.expectAssistantMessageContains('Sure thing');
   });
 
   it('navigates to the Build RAG page and triggers an index build', () => {
     stubTopicList([]);
+    stubBuildRag();
 
-    cy.intercept('POST', `${apiUrl}/code-qa/build-rag/`, (req) => {
-      req.reply({ statusCode: 200, body: {} });
-    }).as('buildRag');
+    chatPage.visit();
+    chatPage.clickBuildRagNav();
 
-    cy.visit('/');
-    cy.get('[data-cy="build-rag-nav"]', { timeout: 10000 }).click();
-
-    cy.url().should('include', '/build-rag');
-    cy.get('[data-cy="root-input"]').type('/workspace/project');
-    cy.get('[data-cy="launch-button"]').click();
+    const buildRagPage = new BuildRagPage();
+    buildRagPage.assertOnPage();
+    buildRagPage.typeRootPath('/workspace/project').launchBuild();
 
     cy.wait('@buildRag').its('request.body').should('deep.equal', { root: '/workspace/project' });
-    cy.get('[data-cy="toast"]').should('be.visible').and('contain', 'RAG index build triggered.');
+    buildRagPage.expectToastMessage('RAG index build triggered.');
   });
 });

@@ -1,0 +1,21 @@
+export class BuildRagPage {
+  assertOnPage() {
+    cy.url().should('include', '/build-rag');
+    return this;
+  }
+
+  typeRootPath(path: string) {
+    cy.get('[data-cy="root-input"]').type(path);
+    return this;
+  }
+
+  launchBuild() {
+    cy.get('[data-cy="launch-button"]').click();
+    return this;
+  }
+
+  expectToastMessage(text: string) {
+    cy.get('[data-cy="toast"]').should('be.visible').and('contain', text);
+    return this;
+  }
+}
