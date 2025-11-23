@@ -123,7 +123,7 @@ REST_FRAMEWORK = {
 
 # Test runner configuration
 TEST_RUNNER = os.getenv(
-    "DJANGO_TEST_RUNNER", "xmlrunner.extra.djangotestrunner.XMLTestRunner"
+    "DJANGO_TEST_RUNNER", "project.test_runner.CoverageXMLTestRunner"
 )
 TEST_OUTPUT_DIR = Path(os.getenv("TEST_OUTPUT_DIR", BASE_DIR / "test-results"))
 TEST_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
