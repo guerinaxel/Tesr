@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import Mock, patch
 
 from django.test import SimpleTestCase
 from docx import Document
+from PyPDF2 import PdfWriter
 
-from codeqa.code_extractor import collect_code_chunks
+from codeqa.code_extractor import collect_code_chunks, extract_pdf_text
 
 
 PDF_CONTENT = b"""%PDF-1.4
@@ -75,3 +77,38 @@ class CollectCodeChunksTests(SimpleTestCase):
         self.assertTrue(
             any("File: sample.docx" in chunk and "Hello Word Doc" in chunk for chunk in chunks),
         )
+
+
+class ExtractPdfTextTests(SimpleTestCase):
+    def setUp(self) -> None:
+        self.tmpdir = TemporaryDirectory()
+        self.root_path = Path(self.tmpdir.name)
+        self.addCleanup(self.tmpdir.cleanup)
+
+    def test_extracts_text_pdf_without_ocr(self) -> None:
+        pdf_path = self.root_path / "text.pdf"
+        pdf_path.write_bytes(PDF_CONTENT)
+
+        text = extract_pdf_text(pdf_path)
+
+        self.assertIn("Test PDF", text)
+
+    def test_extracts_pdf_text_from_image_pages_via_ocr(self) -> None:
+        pdf_path = self.root_path / "image.pdf"
+        writer = PdfWriter()
+        writer.add_blank_page(width=200, height=200)
+        with pdf_path.open("wb") as pdf_file:
+            writer.write(pdf_file)
+
+        mock_convert_from_path = Mock(return_value=["image_page"])
+        mock_image_to_string = Mock(return_value="Picture Text")
+
+        with patch(
+            "codeqa.code_extractor.load_optional_ocr_modules",
+            return_value=(mock_convert_from_path, mock_image_to_string),
+        ):
+            text = extract_pdf_text(pdf_path)
+
+        mock_convert_from_path.assert_called_once_with(str(pdf_path))
+        mock_image_to_string.assert_called_once_with("image_page")
+        self.assertIn("Picture Text", text)
