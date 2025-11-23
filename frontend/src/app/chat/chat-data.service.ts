@@ -45,4 +45,9 @@ export class ChatDataService {
   createTopic(name: string) {
     return this.http.post<TopicDetail>(`${this.apiUrl}/topics/`, { name });
   }
+
+  rebuildIndex(root?: string) {
+    const payload = root ? { root } : {};
+    return this.http.post(`${this.apiUrl}/code-qa/build-rag/`, payload);
+  }
 }

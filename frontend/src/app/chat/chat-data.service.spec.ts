@@ -60,4 +60,18 @@ describe('ChatDataService', () => {
     expect(req.request.body).toEqual({ name: 'New Feature' });
     req.flush({ id: 10, name: 'New Feature', message_count: 0, messages: [] });
   });
+
+  it('requests a RAG rebuild with an optional root', () => {
+    service.rebuildIndex('frontend').subscribe();
+
+    let req = httpMock.expectOne(`${environment.apiUrl}/code-qa/build-rag/`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ root: 'frontend' });
+    req.flush({});
+
+    service.rebuildIndex().subscribe();
+    req = httpMock.expectOne(`${environment.apiUrl}/code-qa/build-rag/`);
+    expect(req.request.body).toEqual({});
+    req.flush({});
+  });
 });

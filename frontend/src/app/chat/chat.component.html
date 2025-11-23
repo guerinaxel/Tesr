@@ -58,6 +58,47 @@
       </mat-card-header>
 
       <mat-card-content>
+        <div class="rebuild-bar">
+          <mat-form-field class="rebuild-bar__field" appearance="outline" floatLabel="always">
+            <mat-label>Racine (optionnel)</mat-label>
+            <input
+              matInput
+              [ngModel]="rebuildRoot()"
+              (ngModelChange)="rebuildRoot.set($event)"
+              name="rebuildRoot"
+              placeholder="Dernier chemin ou topic utilisé"
+            />
+          </mat-form-field>
+          <button
+            mat-stroked-button
+            color="accent"
+            type="button"
+            (click)="rebuildIndex()"
+            [disabled]="isRebuilding()"
+            data-cy="rebuild-button"
+          >
+            @if (isRebuilding()) {
+              <mat-progress-spinner
+                mode="indeterminate"
+                diameter="18"
+                strokeWidth="3"
+              ></mat-progress-spinner>
+            } @else {
+              <mat-icon aria-hidden="true">build</mat-icon>
+            }
+            <span>Rebuild Index</span>
+          </button>
+        </div>
+        @if (rebuildFeedback()) {
+          <div
+            class="rebuild-feedback"
+            [class.rebuild-feedback--error]="rebuildHasError()"
+            data-cy="rebuild-feedback"
+          >
+            {{ rebuildFeedback() }}
+          </div>
+        }
+
         <div class="messages" #messagesContainer data-cy="messages">
           @if (!hasMessages()) {
             <div class="empty-state" data-cy="empty-state">

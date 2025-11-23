@@ -14,7 +14,7 @@ describe('ChatComponent', () => {
   beforeEach(async () => {
     chatDataService = jasmine.createSpyObj<ChatDataService>(
       'ChatDataService',
-      ['sendQuestion', 'getTopics', 'getTopicDetail', 'createTopic']
+      ['sendQuestion', 'getTopics', 'getTopicDetail', 'createTopic', 'rebuildIndex']
     );
 
     await TestBed.configureTestingModule({
@@ -361,5 +361,30 @@ describe('ChatComponent', () => {
     expect(component.topics().length).toBe(0);
     expect(component.selectedTopicId()).toBeNull();
     expect(component.messages().length).toBe(0);
+  });
+
+  it('rebuilds the index using the selected topic as root', () => {
+    chatDataService.rebuildIndex.and.returnValue(of({}));
+
+    component.selectedTopicId.set(4);
+    component.rebuildRoot.set('');
+
+    component.rebuildIndex();
+
+    expect(chatDataService.rebuildIndex).toHaveBeenCalledWith('4');
+    expect(component.rebuildFeedback()).toContain('succès');
+    expect(component.isRebuilding()).toBeFalse();
+  });
+
+  it('rebuilds the index using a stored root when no topic is selected', () => {
+    chatDataService.rebuildIndex.and.returnValue(of({}));
+
+    component.selectedTopicId.set(null);
+    component.rebuildRoot.set('my/repo');
+
+    component.rebuildIndex();
+
+    expect(chatDataService.rebuildIndex).toHaveBeenCalledWith('my/repo');
+    expect(component.rebuildFeedback()).toBe('Index reconstruit avec succès.');
   });
 });
