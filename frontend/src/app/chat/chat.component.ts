@@ -1,4 +1,15 @@
-import { Component, inject, ViewChild, ElementRef, OnInit } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  OnInit,
+  ViewChild,
+  computed,
+  inject,
+  input,
+  model,
+  output,
+  signal,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
@@ -58,34 +69,51 @@ interface CodeQaResponse {
 export class ChatComponent implements OnInit {
   private readonly http = inject(HttpClient);
 
+  readonly initialTopicId = input<number | null>(null);
+  readonly messageSent = output<ChatMessage>();
+
   @ViewChild('messagesContainer') messagesContainer?: ElementRef<HTMLDivElement>;
 
-  messages: ChatMessage[] = [];
-  question = '';
-  systemPrompt: 'code expert' | 'document expert' | 'custom' = 'code expert';
-  customPrompt = '';
-  isSending = false;
-  topics: TopicSummary[] = [];
-  selectedTopicId: number | null = null;
-  newTopicName = '';
+  readonly messages = signal<ChatMessage[]>([]);
+  readonly question = model('');
+  readonly systemPrompt = model<'code expert' | 'document expert' | 'custom'>(
+    'code expert'
+  );
+  readonly customPrompt = model('');
+  readonly isSending = signal(false);
+  readonly topics = signal<TopicSummary[]>([]);
+  readonly selectedTopicId = signal<number | null>(null);
+  readonly newTopicName = model('');
   private pendingTopicSelection: number | null = null;
   private nextId = 1;
 
+  readonly hasTopics = computed(() => this.topics().length > 0);
+  readonly hasMessages = computed(() => this.messages().length > 0);
+  readonly isCustomPrompt = computed(() => this.systemPrompt() === 'custom');
+  readonly emptyStateText = computed(() =>
+    this.selectedTopicId()
+      ? "Commencez la conversation pour obtenir de l'aide sur votre projet."
+      : 'Sélectionnez ou créez un topic pour démarrer.'
+  );
+  readonly sendingLabel = computed(() =>
+    this.isSending() ? 'Envoi...' : 'Envoyer'
+  );
+
   ngOnInit(): void {
-    this.loadTopics();
+    this.loadTopics(this.initialTopicId());
   }
 
   onSubmit(): void {
-    if (this.isSending) {
+    if (this.isSending()) {
       return;
     }
 
-    const text = this.question.trim();
+    const text = this.question().trim();
     if (!text) {
       return;
     }
 
-    if (this.systemPrompt === 'custom' && !this.customPrompt.trim()) {
+    if (this.isCustomPrompt() && !this.customPrompt().trim()) {
       return;
     }
 
@@ -94,22 +122,23 @@ export class ChatComponent implements OnInit {
       from: 'user',
       content: text,
     };
-    this.messages = [...this.messages, userMsg];
-    this.question = '';
-    this.isSending = true;
+    this.messages.update((msgs) => [...msgs, userMsg]);
+    this.messageSent.emit(userMsg);
+    this.question.set('');
+    this.isSending.set(true);
     this.scrollToBottom();
 
     const payload: Record<string, string> = {
       question: text,
-      system_prompt: this.systemPrompt,
+      system_prompt: this.systemPrompt(),
     };
 
-    if (this.selectedTopicId) {
-      payload.topic_id = String(this.selectedTopicId);
+    if (this.selectedTopicId()) {
+      payload.topic_id = String(this.selectedTopicId());
     }
 
-    if (this.systemPrompt === 'custom') {
-      payload.custom_prompt = this.customPrompt.trim();
+    if (this.isCustomPrompt()) {
+      payload.custom_prompt = this.customPrompt().trim();
     }
 
     this.http
@@ -121,9 +150,9 @@ export class ChatComponent implements OnInit {
             from: 'assistant',
             content: res.answer ?? '(empty answer)',
           };
-          this.messages = [...this.messages, aiMsg];
+          this.messages.update((msgs) => [...msgs, aiMsg]);
           this.finishSending();
-          this.refreshTopicMetadata(this.selectedTopicId);
+          this.refreshTopicMetadata(this.selectedTopicId());
           this.scrollToBottom();
         },
         error: (err) => {
@@ -135,7 +164,7 @@ export class ChatComponent implements OnInit {
             content: detail,
             isError: true,
           };
-          this.messages = [...this.messages, errorMsg];
+          this.messages.update((msgs) => [...msgs, errorMsg]);
           this.finishSending();
           this.scrollToBottom();
         },
@@ -147,11 +176,11 @@ export class ChatComponent implements OnInit {
       return;
     }
 
-    if (this.isSending) {
+    if (this.isSending()) {
       return;
     }
 
-    const text = this.question.trim();
+    const text = this.question().trim();
     if (!text) {
       return;
     }
@@ -170,7 +199,7 @@ export class ChatComponent implements OnInit {
 
   private finishSending(): void {
     setTimeout(() => {
-      this.isSending = false;
+      this.isSending.set(false);
     }, 200);
   }
 
@@ -179,12 +208,12 @@ export class ChatComponent implements OnInit {
       .get<{ topics: TopicSummary[] }>(`${environment.apiUrl}/topics/`)
       .subscribe({
         next: (res) => {
-          this.topics = (res.topics ?? []).sort((a, b) => a.id - b.id);
+          this.topics.set((res.topics ?? []).sort((a, b) => a.id - b.id));
 
           const desiredTopicId =
-            selectTopicId ?? this.pendingTopicSelection ?? this.selectedTopicId;
+            selectTopicId ?? this.pendingTopicSelection ?? this.selectedTopicId();
           const topicExists = desiredTopicId
-            ? this.topics.some((entry) => entry.id === desiredTopicId)
+            ? this.topics().some((entry) => entry.id === desiredTopicId)
             : false;
 
           if (topicExists && desiredTopicId != null) {
@@ -193,49 +222,52 @@ export class ChatComponent implements OnInit {
             return;
           }
 
-          if (this.topics.length) {
+          if (this.topics().length) {
             this.pendingTopicSelection = null;
-            this.selectTopic(this.topics[this.topics.length - 1].id);
+            const entries = this.topics();
+            this.selectTopic(entries[entries.length - 1].id);
             return;
           }
 
-          this.selectedTopicId = null;
-          this.messages = [];
+          this.selectedTopicId.set(null);
+          this.messages.set([]);
         },
         error: () => {
-          this.topics = [];
-          this.selectedTopicId = null;
-          this.messages = [];
+          this.topics.set([]);
+          this.selectedTopicId.set(null);
+          this.messages.set([]);
         },
       });
   }
 
   selectTopic(topicId: number, force = false): void {
-    if (this.selectedTopicId === topicId && !force) {
+    if (this.selectedTopicId() === topicId && !force) {
       return;
     }
 
-    this.selectedTopicId = topicId;
+    this.selectedTopicId.set(topicId);
     this.http
       .get<TopicDetail>(`${environment.apiUrl}/topics/${topicId}/`)
       .subscribe({
         next: (res) => {
           this.nextId = 1;
-          this.messages = res.messages.map((msg) => ({
-            id: this.nextId++,
-            from: msg.role,
-            content: msg.content,
-          }));
+          this.messages.set(
+            res.messages.map((msg) => ({
+              id: this.nextId++,
+              from: msg.role,
+              content: msg.content,
+            }))
+          );
           this.scrollToBottom();
         },
         error: () => {
-          this.messages = [];
+          this.messages.set([]);
         },
       });
   }
 
   createTopic(): void {
-    const name = this.newTopicName.trim();
+    const name = this.newTopicName().trim();
     if (!name) {
       return;
     }
@@ -244,7 +276,7 @@ export class ChatComponent implements OnInit {
       .post<TopicDetail>(`${environment.apiUrl}/topics/`, { name })
       .subscribe({
         next: (topic) => {
-          this.newTopicName = '';
+          this.newTopicName.set('');
           this.pendingTopicSelection = topic.id;
           this.selectTopic(topic.id, true);
           this.loadTopics(topic.id);
@@ -259,10 +291,16 @@ export class ChatComponent implements OnInit {
       .get<TopicDetail>(`${environment.apiUrl}/topics/${topicId}/`)
       .subscribe({
         next: (topic) => {
-          this.topics = this.topics.map((entry) =>
-            entry.id === topic.id
-              ? { id: topic.id, name: topic.name, message_count: topic.message_count }
-              : entry
+          this.topics.update((entries) =>
+            entries.map((entry) =>
+              entry.id === topic.id
+                ? {
+                    id: topic.id,
+                    name: topic.name,
+                    message_count: topic.message_count,
+                  }
+                : entry
+            )
           );
         },
       });
