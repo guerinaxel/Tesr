@@ -210,8 +210,8 @@ export class ChatComponent implements OnInit {
       });
   }
 
-  selectTopic(topicId: number): void {
-    if (this.selectedTopicId === topicId) {
+  selectTopic(topicId: number, force = false): void {
+    if (this.selectedTopicId === topicId && !force) {
       return;
     }
 
@@ -246,7 +246,7 @@ export class ChatComponent implements OnInit {
         next: (topic) => {
           this.newTopicName = '';
           this.pendingTopicSelection = topic.id;
-          this.selectTopic(topic.id);
+          this.selectTopic(topic.id, true);
           this.loadTopics(topic.id);
         },
       });
