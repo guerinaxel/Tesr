@@ -68,6 +68,7 @@ export class ChatComponent implements OnInit {
   topics: TopicSummary[] = [];
   selectedTopicId: number | null = null;
   newTopicName = '';
+  private pendingTopicSelection: number | null = null;
   private nextId = 1;
 
   ngOnInit(): void {
@@ -173,18 +174,38 @@ export class ChatComponent implements OnInit {
     }, 200);
   }
 
-  loadTopics(): void {
+  loadTopics(selectTopicId: number | null = null): void {
     this.http
       .get<{ topics: TopicSummary[] }>(`${environment.apiUrl}/topics/`)
       .subscribe({
         next: (res) => {
-          this.topics = res.topics ?? [];
-          if (this.topics.length && !this.selectedTopicId) {
-            this.selectTopic(this.topics[0].id);
+          this.topics = (res.topics ?? []).sort((a, b) => a.id - b.id);
+
+          const desiredTopicId =
+            selectTopicId ?? this.pendingTopicSelection ?? this.selectedTopicId;
+          const topicExists = desiredTopicId
+            ? this.topics.some((entry) => entry.id === desiredTopicId)
+            : false;
+
+          if (topicExists && desiredTopicId != null) {
+            this.pendingTopicSelection = null;
+            this.selectTopic(desiredTopicId);
+            return;
           }
+
+          if (this.topics.length) {
+            this.pendingTopicSelection = null;
+            this.selectTopic(this.topics[this.topics.length - 1].id);
+            return;
+          }
+
+          this.selectedTopicId = null;
+          this.messages = [];
         },
         error: () => {
           this.topics = [];
+          this.selectedTopicId = null;
+          this.messages = [];
         },
       });
   }
@@ -224,12 +245,8 @@ export class ChatComponent implements OnInit {
       .subscribe({
         next: (topic) => {
           this.newTopicName = '';
-          this.topics = [...this.topics, {
-            id: topic.id,
-            name: topic.name,
-            message_count: topic.message_count,
-          }];
-          this.selectTopic(topic.id);
+          this.pendingTopicSelection = topic.id;
+          this.loadTopics(topic.id);
         },
       });
   }

@@ -4,13 +4,16 @@ const stubTopicList = (topics: Array<{ id: number; name: string; message_count: 
   cy.intercept('GET', `${apiUrl}/topics/`, { topics }).as('listTopics');
 };
 
-const stubTopicDetail = (topic: {
-  id: number;
-  name: string;
-  message_count: number;
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
-}) => {
-  cy.intercept('GET', `${apiUrl}/topics/${topic.id}/`, topic).as('topicDetail');
+const stubTopicDetail = (
+  topic: {
+    id: number;
+    name: string;
+    message_count: number;
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  },
+  alias = 'topicDetail'
+) => {
+  cy.intercept('GET', `${apiUrl}/topics/${topic.id}/`, topic).as(alias);
 };
 
 describe('AI Code Assistant app', () => {
@@ -78,7 +81,15 @@ describe('AI Code Assistant app', () => {
   });
 
   it('creates a new topic and shows its empty conversation state', () => {
-    stubTopicList([]);
+    let listCall = 0;
+    cy.intercept('GET', `${apiUrl}/topics/`, () => {
+      listCall += 1;
+      if (listCall === 1) {
+        return { topics: [] };
+      }
+
+      return { topics: [{ id: 3, name: 'New thread', message_count: 0 }] };
+    }).as('listTopics');
     cy.intercept('POST', `${apiUrl}/topics/`, {
       id: 3,
       name: 'New thread',
@@ -98,6 +109,49 @@ describe('AI Code Assistant app', () => {
 
     cy.contains('[data-cy="topic-item"]', 'New thread').should('have.class', 'selected');
     cy.get('[data-cy="empty-state"]').should('contain', 'Commencez la conversation');
+  });
+
+  it('lists multiple topics and loads their histories when switching', () => {
+    stubTopicList([
+      { id: 1, name: 'Sprint 12', message_count: 2 },
+      { id: 2, name: 'Bugfix', message_count: 1 },
+    ]);
+    stubTopicDetail(
+      {
+        id: 2,
+        name: 'Bugfix',
+        message_count: 1,
+        messages: [
+          { role: 'user', content: 'Found a bug' },
+          { role: 'assistant', content: 'Please try restarting' },
+        ],
+      },
+      'bugfixDetail'
+    );
+    stubTopicDetail(
+      {
+        id: 1,
+        name: 'Sprint 12',
+        message_count: 2,
+        messages: [
+          { role: 'user', content: 'Plan sprint' },
+          { role: 'assistant', content: 'Sure thing' },
+        ],
+      },
+      'sprintDetail'
+    );
+
+    cy.visit('/');
+    cy.wait('@listTopics');
+    cy.wait('@bugfixDetail');
+
+    cy.contains('[data-cy="topic-item"]', 'Sprint 12').should('exist');
+    cy.contains('[data-cy="topic-item"]', 'Bugfix').should('exist');
+    cy.get('.message--assistant .message__content').should('contain', 'Please try restarting');
+
+    cy.contains('[data-cy="topic-item"]', 'Sprint 12').click();
+    cy.wait('@sprintDetail');
+    cy.get('.message--assistant .message__content').should('contain', 'Sure thing');
   });
 
   it('navigates to the Build RAG page and triggers an index build', () => {

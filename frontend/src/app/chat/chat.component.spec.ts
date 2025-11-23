@@ -158,11 +158,77 @@ describe('ChatComponent', () => {
       messages: [],
     });
 
+    const listReq = httpMock.expectOne(`${environment.apiUrl}/topics/`);
+    listReq.flush({
+      topics: [
+        { id: 1, name: 'Default', message_count: 0 },
+        { id: 2, name: 'Feature A', message_count: 0 },
+      ],
+    });
+
     const detailReq = httpMock.expectOne(`${environment.apiUrl}/topics/2/`);
     detailReq.flush({ id: 2, name: 'Feature A', message_count: 0, messages: [] });
 
     expect(component.topics.length).toBe(2);
     expect(component.selectedTopicId).toBe(2);
     expect(component.messages.length).toBe(0);
+  });
+
+  it('loads topics from the API and selects the most recent when none is chosen', () => {
+    component.selectedTopicId = null;
+
+    component.loadTopics();
+
+    const listReq = httpMock.expectOne(`${environment.apiUrl}/topics/`);
+    listReq.flush({
+      topics: [
+        { id: 5, name: 'Earlier', message_count: 2 },
+        { id: 6, name: 'Latest', message_count: 4 },
+      ],
+    });
+
+    const detailReq = httpMock.expectOne(`${environment.apiUrl}/topics/6/`);
+    detailReq.flush({
+      id: 6,
+      name: 'Latest',
+      message_count: 4,
+      messages: [
+        { role: 'user', content: 'Hi' },
+        { role: 'assistant', content: 'Hello' },
+      ],
+    });
+
+    expect(component.selectedTopicId).toBe(6);
+    expect(component.messages.length).toBe(2);
+    expect(component.messages[0]).toEqual(
+      jasmine.objectContaining({ from: 'user', content: 'Hi' })
+    );
+    expect(component.topics.map((t) => t.id)).toEqual([5, 6]);
+  });
+
+  it('allows switching to another topic and loads its history', () => {
+    component.topics = [
+      { id: 1, name: 'Default', message_count: 0 },
+      { id: 2, name: 'Follow-up', message_count: 2 },
+    ];
+    component.selectedTopicId = 1;
+
+    component.selectTopic(2);
+
+    const detailReq = httpMock.expectOne(`${environment.apiUrl}/topics/2/`);
+    detailReq.flush({
+      id: 2,
+      name: 'Follow-up',
+      message_count: 2,
+      messages: [
+        { role: 'user', content: 'Question' },
+        { role: 'assistant', content: 'Answer' },
+      ],
+    });
+
+    expect(component.selectedTopicId).toBe(2);
+    expect(component.messages[1]).toEqual(
+      jasmine.objectContaining({ from: 'assistant', content: 'Answer' })
+    );
   });
 });
