@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import importlib
+import os
+from pathlib import Path
 import sys
+import tempfile
 import types
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -213,6 +216,35 @@ class BuildRagIndexViewTests(SimpleTestCase):
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         _args, kwargs = mock_call_command.call_args
         self.assertNotIn("root", kwargs)
+
+    def test_persists_and_reuses_last_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir, patch.dict(
+            os.environ, {"RAG_DATA_DIR": tmpdir}
+        ):
+            request = self.factory.post(
+                "/api/code-qa/build-rag/", {"root": "/tmp/project"}, format="json"
+            )
+
+            with patch("codeqa.views.call_command") as mock_call_command:
+                response = BuildRagIndexView.as_view()(request)
+
+            self.assertEqual(status.HTTP_200_OK, response.status_code)
+            _args, kwargs = mock_call_command.call_args
+            self.assertEqual("/tmp/project", kwargs["root"])
+
+            last_root_path = Path(tmpdir) / BuildRagIndexView._last_root_filename
+            self.assertTrue(last_root_path.exists())
+            self.assertEqual("/tmp/project", last_root_path.read_text())
+
+            second_request = self.factory.post(
+                "/api/code-qa/build-rag/", {}, format="json"
+            )
+            with patch("codeqa.views.call_command") as mock_call_command2:
+                second_response = BuildRagIndexView.as_view()(second_request)
+
+            self.assertEqual(status.HTTP_200_OK, second_response.status_code)
+            _args2, kwargs2 = mock_call_command2.call_args
+            self.assertEqual("/tmp/project", kwargs2["root"])
 
     def test_returns_error_on_failure(self) -> None:
         request = self.factory.post("/api/code-qa/build-rag/", {}, format="json")

@@ -70,17 +70,11 @@ export class ChatComponent implements OnInit {
   );
   readonly customPrompt = model('');
   readonly isSending = signal(false);
-  readonly isRebuilding = signal(false);
   readonly topics = signal<TopicSummary[]>([]);
   readonly selectedTopicId = signal<number | null>(null);
   readonly newTopicName = model('');
-  readonly rebuildRoot = model('');
-  readonly rebuildFeedback = signal<string | null>(null);
-  readonly rebuildHasError = signal(false);
   private pendingTopicSelection: number | null = null;
   private nextId = 1;
-  private lastUsedRoot: string | null = null;
-  private readonly rebuildRootStorageKey = 'chat.rebuildRoot';
 
   readonly hasTopics = computed(() => this.topics().length > 0);
   readonly hasMessages = computed(() => this.messages().length > 0);
@@ -95,7 +89,6 @@ export class ChatComponent implements OnInit {
   );
 
   ngOnInit(): void {
-    this.restoreRebuildRoot();
     this.loadTopics(this.initialTopicId());
   }
 
@@ -270,63 +263,6 @@ export class ChatComponent implements OnInit {
         this.loadTopics(topic.id);
       },
     });
-  }
-
-  rebuildIndex(): void {
-    if (this.isRebuilding()) return;
-
-    this.isRebuilding.set(true);
-    this.rebuildFeedback.set(null);
-    this.rebuildHasError.set(false);
-
-    const root = this.resolveRebuildRoot();
-
-    this.chatDataService.rebuildIndex(root ?? undefined).subscribe({
-      next: () => {
-        if (root) {
-          this.persistRebuildRoot(root);
-        }
-
-        this.rebuildHasError.set(false);
-        this.rebuildFeedback.set('Index reconstruit avec succès.');
-        this.isRebuilding.set(false);
-      },
-      error: (err) => {
-        this.rebuildHasError.set(true);
-        this.rebuildFeedback.set(
-          err?.error?.detail ?? 'Erreur lors de la reconstruction de l\'index.'
-        );
-        this.isRebuilding.set(false);
-      },
-    });
-  }
-
-  private resolveRebuildRoot(): string | null {
-    const topicRoot = this.selectedTopicId();
-    if (topicRoot != null) {
-      return String(topicRoot);
-    }
-
-    const typedRoot = this.rebuildRoot().trim();
-    if (typedRoot) {
-      return typedRoot;
-    }
-
-    return this.lastUsedRoot;
-  }
-
-  private restoreRebuildRoot(): void {
-    const savedRoot = localStorage.getItem(this.rebuildRootStorageKey);
-    if (!savedRoot) return;
-
-    this.lastUsedRoot = savedRoot;
-    this.rebuildRoot.set(savedRoot);
-  }
-
-  private persistRebuildRoot(root: string): void {
-    this.lastUsedRoot = root;
-    this.rebuildRoot.set(root);
-    localStorage.setItem(this.rebuildRootStorageKey, root);
   }
 
   private refreshTopicMetadata(topicId: number | null): void {

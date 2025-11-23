@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from io import StringIO
 import inspect
+import os
+from pathlib import Path
 from typing import Any
 
 from django.http import HttpRequest
@@ -111,11 +113,36 @@ class HealthView(APIView):
 class BuildRagIndexView(APIView):
     """Trigger rebuilding the RAG index via the management command."""
 
+    _last_root_filename = "last_rag_root.txt"
+
+    @staticmethod
+    def _get_last_root_path() -> Path:
+        data_dir = Path(
+            os.getenv("RAG_DATA_DIR", Path(__file__).resolve().parent / "data")
+        )
+        return data_dir / BuildRagIndexView._last_root_filename
+
+    @classmethod
+    def _load_last_root(cls) -> str | None:
+        last_root_path = cls._get_last_root_path()
+        try:
+            content = last_root_path.read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            return None
+        return content or None
+
+    @classmethod
+    def _persist_last_root(cls, root: str) -> None:
+        last_root_path = cls._get_last_root_path()
+        last_root_path.parent.mkdir(parents=True, exist_ok=True)
+        last_root_path.write_text(root, encoding="utf-8")
+
     def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> Response:
         serializer = BuildRagRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        root = serializer.validated_data.get("root") or None
+        provided_root = serializer.validated_data.get("root") or None
+        root = (provided_root or "").strip() or self._load_last_root()
         stdout, stderr = StringIO(), StringIO()
 
         try:
@@ -132,6 +159,9 @@ class BuildRagIndexView(APIView):
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+        if root:
+            self._persist_last_root(root)
 
         return Response(
             {
