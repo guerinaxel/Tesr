@@ -1,5 +1,6 @@
+@use './styles/theme' as *;
+
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
-@import '@angular/material/prebuilt-themes/indigo-pink.css';
 
 :root {
   color-scheme: light;

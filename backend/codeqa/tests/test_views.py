@@ -11,9 +11,15 @@ from rest_framework import status
 from rest_framework.test import APIRequestFactory
 
 # Provide lightweight substitutes for heavy optional dependencies
-sys.modules["faiss"] = types.SimpleNamespace(IndexFlatIP=object, write_index=lambda *_, **__: None, read_index=lambda *_: object())
+sys.modules["faiss"] = types.SimpleNamespace(
+    IndexFlatIP=object,
+    write_index=lambda *_, **__: None,
+    read_index=lambda *_: object(),
+)
 sys.modules["sentence_transformers"] = types.SimpleNamespace(
-    SentenceTransformer=lambda *_, **__: SimpleNamespace(encode=lambda texts, **__: [[0.1] * 3 for _ in texts])
+    SentenceTransformer=lambda *_, **__: SimpleNamespace(
+        encode=lambda texts, **__: [[0.1] * 3 for _ in texts]
+    )
 )
 sys.modules["joblib"] = types.SimpleNamespace(dump=lambda *_, **__: None, load=lambda *_: [])
 sys.modules["ollama"] = types.SimpleNamespace(
@@ -21,11 +27,11 @@ sys.modules["ollama"] = types.SimpleNamespace(
     chat=lambda model, messages, **kwargs: SimpleNamespace(message=SimpleNamespace(content="ai")),
 )
 
-from codeqa import rag_index as rag_index_module
+from codeqa import rag_index as rag_index_module  # noqa: E402
 importlib.reload(rag_index_module)
-from codeqa import rag_service as rag_service_module
+from codeqa import rag_service as rag_service_module  # noqa: E402
 importlib.reload(rag_service_module)
-from codeqa.views import BuildRagIndexView, CodeQAView, HealthView
+from codeqa.views import BuildRagIndexView, CodeQAView, HealthView  # noqa: E402
 
 
 class CodeQAViewTests(SimpleTestCase):

@@ -11,8 +11,16 @@ from django.test import SimpleTestCase
 
 class RagServiceTests(SimpleTestCase):
     def setUp(self) -> None:
-        sys.modules["faiss"] = types.SimpleNamespace(IndexFlatIP=object, write_index=lambda *_, **__: None, read_index=lambda *_: object())
-        sys.modules["sentence_transformers"] = types.SimpleNamespace(SentenceTransformer=lambda *_, **__: SimpleNamespace(encode=lambda texts, **__: [[0.1] * 3 for _ in texts]))
+        sys.modules["faiss"] = types.SimpleNamespace(
+            IndexFlatIP=object,
+            write_index=lambda *_, **__: None,
+            read_index=lambda *_: object(),
+        )
+        sys.modules["sentence_transformers"] = types.SimpleNamespace(
+            SentenceTransformer=lambda *_, **__: SimpleNamespace(
+                encode=lambda texts, **__: [[0.1] * 3 for _ in texts]
+            )
+        )
         sys.modules["joblib"] = types.SimpleNamespace(dump=lambda *_, **__: None, load=lambda *_: [])
 
         sys.modules["ollama"] = types.SimpleNamespace(

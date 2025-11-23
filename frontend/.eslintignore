@@ -1,0 +1,7 @@
+dist
+node_modules
+coverage
+
+# Cypress artifacts
+cypress/videos
+cypress/screenshots

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 import os
 from io import StringIO
 from pathlib import Path
