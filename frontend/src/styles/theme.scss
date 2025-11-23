@@ -3,24 +3,49 @@
 // Custom AI Assistant theme following Angular Material best practices.
 // Uses Material Design 3 design tokens and exposes system-level CSS variables
 // for use across the application styles.
-$ai-assistant-theme: mat.define-theme((
+$ai-primary: mat.define-palette(mat.$cyan-palette, 600);
+$ai-secondary: mat.define-palette(mat.$blue-palette);
+$ai-tertiary: mat.define-palette(mat.$orange-palette);
+$ai-neutral: mat.define-palette(mat.$blue-grey-palette);
+$ai-error: mat.define-palette(mat.$red-palette);
+
+$ai-assistant-theme: mat.define-light-theme((
   color: (
-    theme-type: light,
-    primary: mat.$cyan-palette,
-    secondary: mat.$blue-palette,
-    tertiary: mat.$orange-palette,
-    neutral: mat.$blue-grey-palette,
+    primary: $ai-primary,
+    accent: $ai-secondary,
+    warn: $ai-tertiary,
   ),
-  typography: mat.define-typography-config((
-    font-family: 'Roboto', 'Helvetica Neue', Arial, sans-serif,
-  )),
+  typography: mat.define-typography-config(),
   density: 0,
 ));
 
 @include mat.core();
 
+@include mat.all-component-themes($ai-assistant-theme);
+
 :root {
-  @include mat.system-level-colors($ai-assistant-theme);
-  @include mat.system-level-typography($ai-assistant-theme);
-  @include mat.all-component-themes($ai-assistant-theme);
+  // Primary
+  --mat-sys-primary: #{mat.get-color-from-palette($ai-primary, 600)};
+  --mat-sys-on-primary: #{mat.get-contrast-color-from-palette($ai-primary, 600)};
+  --mat-sys-primary-container: #{mat.get-color-from-palette($ai-primary, 100)};
+  --mat-sys-on-primary-container: #{mat.get-contrast-color-from-palette($ai-primary, 100)};
+
+  // Secondary
+  --mat-sys-secondary: #{mat.get-color-from-palette($ai-secondary, 600)};
+  --mat-sys-secondary-container: #{mat.get-color-from-palette($ai-secondary, 50)};
+  --mat-sys-on-secondary-container: #{mat.get-contrast-color-from-palette($ai-secondary, 50)};
+
+  // Surface / Neutral
+  --mat-sys-surface-container-lowest: #{mat.get-color-from-palette($ai-neutral, 50)};
+  --mat-sys-surface-container-low: #{mat.get-color-from-palette($ai-neutral, 100)};
+  --mat-sys-surface: #{mat.get-color-from-palette($ai-neutral, 50)};
+  --mat-sys-outline: #{mat.get-color-from-palette($ai-neutral, 400)};
+  --mat-sys-outline-variant: #{mat.get-color-from-palette($ai-neutral, 200)};
+  --mat-sys-on-surface: #{mat.get-contrast-color-from-palette($ai-neutral, 50)};
+  --mat-sys-on-surface-variant: #{mat.get-color-from-palette($ai-neutral, 600)};
+
+  // Error
+  --mat-sys-error: #{mat.get-color-from-palette($ai-error, 600)};
+  --mat-sys-error-container: #{mat.get-color-from-palette($ai-error, 50)};
+  --mat-sys-on-error-container: #{mat.get-contrast-color-from-palette($ai-error, 50)};
 }
