@@ -1,13 +1,19 @@
-@use '@angular/material' as mat;
+// Use the explicit theming module via a direct path so both esbuild and Karma/Webpack
+// can resolve the Sass helpers consistently.
+@use '../../node_modules/@angular/material/core/theming/_theming.scss' as mat;
+@use '../../node_modules/@angular/material/core/theming/_palette.scss' as mat-palette;
+@use '../../node_modules/@angular/material/core/typography/_typography.scss' as mat-typography;
+@use '../../node_modules/@angular/material/core/_core.scss' as mat-core;
+@use '../../node_modules/@angular/material/core/theming/_all-theme.scss' as mat-all-theme;
 
 // Custom AI Assistant theme following Angular Material best practices.
 // Uses Material Design 3 design tokens and exposes system-level CSS variables
 // for use across the application styles.
-$ai-primary: mat.define-palette(mat.$cyan-palette, 600);
-$ai-secondary: mat.define-palette(mat.$blue-palette);
-$ai-tertiary: mat.define-palette(mat.$orange-palette);
-$ai-neutral: mat.define-palette(mat.$blue-grey-palette);
-$ai-error: mat.define-palette(mat.$red-palette);
+$ai-primary: mat.define-palette(mat-palette.$cyan-palette, 600);
+$ai-secondary: mat.define-palette(mat-palette.$blue-palette);
+$ai-tertiary: mat.define-palette(mat-palette.$orange-palette);
+$ai-neutral: mat.define-palette(mat-palette.$blue-grey-palette);
+$ai-error: mat.define-palette(mat-palette.$red-palette);
 
 $ai-assistant-theme: mat.define-light-theme((
   color: (
@@ -15,13 +21,13 @@ $ai-assistant-theme: mat.define-light-theme((
     accent: $ai-secondary,
     warn: $ai-tertiary,
   ),
-  typography: mat.define-typography-config(),
+  typography: mat-typography.define-typography-config(),
   density: 0,
 ));
 
-@include mat.core();
+@include mat-core.core();
 
-@include mat.all-component-themes($ai-assistant-theme);
+@include mat-all-theme.all-component-themes($ai-assistant-theme);
 
 :root {
   // Primary
