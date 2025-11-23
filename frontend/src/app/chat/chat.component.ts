@@ -11,7 +11,6 @@ import {
   signal,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -23,28 +22,18 @@ import { MatListModule } from '@angular/material/list';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 
-import { environment } from '../../environments/environment';
+import {
+  ChatDataService,
+  CodeQaPayload,
+  TopicDetail,
+  TopicSummary,
+} from './chat-data.service';
 
 interface ChatMessage {
   id: number;
   from: 'user' | 'assistant';
   content: string;
   isError?: boolean;
-}
-
-interface TopicSummary {
-  id: number;
-  name: string;
-  message_count: number;
-}
-
-interface TopicDetail extends TopicSummary {
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
-}
-
-interface CodeQaResponse {
-  answer: string;
-  meta?: unknown;
 }
 
 @Component({
@@ -67,7 +56,7 @@ interface CodeQaResponse {
   styleUrls: ['./chat.component.scss'],
 })
 export class ChatComponent implements OnInit {
-  private readonly http = inject(HttpClient);
+  private readonly chatDataService = inject(ChatDataService);
 
   readonly initialTopicId = input<number | null>(null);
   readonly messageSent = output<ChatMessage>();
@@ -128,7 +117,7 @@ export class ChatComponent implements OnInit {
     this.isSending.set(true);
     this.scrollToBottom();
 
-    const payload: Record<string, string> = {
+    const payload: CodeQaPayload = {
       question: text,
       system_prompt: this.systemPrompt(),
     };
@@ -141,34 +130,32 @@ export class ChatComponent implements OnInit {
       payload.custom_prompt = this.customPrompt().trim();
     }
 
-    this.http
-      .post<CodeQaResponse>(`${environment.apiUrl}/code-qa/`, payload)
-      .subscribe({
-        next: (res) => {
-          const aiMsg: ChatMessage = {
-            id: this.nextId++,
-            from: 'assistant',
-            content: res.answer ?? '(empty answer)',
-          };
-          this.messages.update((msgs) => [...msgs, aiMsg]);
-          this.finishSending();
-          this.refreshTopicMetadata(this.selectedTopicId());
-          this.scrollToBottom();
-        },
-        error: (err) => {
-          const detail =
-            err?.error?.detail ?? 'Erreur lors de la requête à /api/code-qa/.';
-          const errorMsg: ChatMessage = {
-            id: this.nextId++,
-            from: 'assistant',
-            content: detail,
-            isError: true,
-          };
-          this.messages.update((msgs) => [...msgs, errorMsg]);
-          this.finishSending();
-          this.scrollToBottom();
-        },
-      });
+    this.chatDataService.sendQuestion(payload).subscribe({
+      next: (res) => {
+        const aiMsg: ChatMessage = {
+          id: this.nextId++,
+          from: 'assistant',
+          content: res.answer ?? '(empty answer)',
+        };
+        this.messages.update((msgs) => [...msgs, aiMsg]);
+        this.finishSending();
+        this.refreshTopicMetadata(this.selectedTopicId());
+        this.scrollToBottom();
+      },
+      error: (err) => {
+        const detail =
+          err?.error?.detail ?? 'Erreur lors de la requête à /api/code-qa/.';
+        const errorMsg: ChatMessage = {
+          id: this.nextId++,
+          from: 'assistant',
+          content: detail,
+          isError: true,
+        };
+        this.messages.update((msgs) => [...msgs, errorMsg]);
+        this.finishSending();
+        this.scrollToBottom();
+      },
+    });
   }
 
   onSpaceSend(event: KeyboardEvent): void {
@@ -204,40 +191,38 @@ export class ChatComponent implements OnInit {
   }
 
   loadTopics(selectTopicId: number | null = null): void {
-    this.http
-      .get<{ topics: TopicSummary[] }>(`${environment.apiUrl}/topics/`)
-      .subscribe({
-        next: (res) => {
-          this.topics.set((res.topics ?? []).sort((a, b) => a.id - b.id));
+    this.chatDataService.getTopics().subscribe({
+      next: (res) => {
+        this.topics.set((res.topics ?? []).sort((a, b) => a.id - b.id));
 
-          const desiredTopicId =
-            selectTopicId ?? this.pendingTopicSelection ?? this.selectedTopicId();
-          const topicExists = desiredTopicId
-            ? this.topics().some((entry) => entry.id === desiredTopicId)
-            : false;
+        const desiredTopicId =
+          selectTopicId ?? this.pendingTopicSelection ?? this.selectedTopicId();
+        const topicExists = desiredTopicId
+          ? this.topics().some((entry) => entry.id === desiredTopicId)
+          : false;
 
-          if (topicExists && desiredTopicId != null) {
-            this.pendingTopicSelection = null;
-            this.selectTopic(desiredTopicId);
-            return;
-          }
+        if (topicExists && desiredTopicId != null) {
+          this.pendingTopicSelection = null;
+          this.selectTopic(desiredTopicId);
+          return;
+        }
 
-          if (this.topics().length) {
-            this.pendingTopicSelection = null;
-            const entries = this.topics();
-            this.selectTopic(entries[entries.length - 1].id);
-            return;
-          }
+        if (this.topics().length) {
+          this.pendingTopicSelection = null;
+          const entries = this.topics();
+          this.selectTopic(entries[entries.length - 1].id);
+          return;
+        }
 
-          this.selectedTopicId.set(null);
-          this.messages.set([]);
-        },
-        error: () => {
-          this.topics.set([]);
-          this.selectedTopicId.set(null);
-          this.messages.set([]);
-        },
-      });
+        this.selectedTopicId.set(null);
+        this.messages.set([]);
+      },
+      error: () => {
+        this.topics.set([]);
+        this.selectedTopicId.set(null);
+        this.messages.set([]);
+      },
+    });
   }
 
   selectTopic(topicId: number, force = false): void {
@@ -246,24 +231,22 @@ export class ChatComponent implements OnInit {
     }
 
     this.selectedTopicId.set(topicId);
-    this.http
-      .get<TopicDetail>(`${environment.apiUrl}/topics/${topicId}/`)
-      .subscribe({
-        next: (res) => {
-          this.nextId = 1;
-          this.messages.set(
-            res.messages.map((msg) => ({
-              id: this.nextId++,
-              from: msg.role,
-              content: msg.content,
-            }))
-          );
-          this.scrollToBottom();
-        },
-        error: () => {
-          this.messages.set([]);
-        },
-      });
+    this.chatDataService.getTopicDetail(topicId).subscribe({
+      next: (res) => {
+        this.nextId = 1;
+        this.messages.set(
+          res.messages.map((msg) => ({
+            id: this.nextId++,
+            from: msg.role,
+            content: msg.content,
+          }))
+        );
+        this.scrollToBottom();
+      },
+      error: () => {
+        this.messages.set([]);
+      },
+    });
   }
 
   createTopic(): void {
@@ -272,37 +255,33 @@ export class ChatComponent implements OnInit {
       return;
     }
 
-    this.http
-      .post<TopicDetail>(`${environment.apiUrl}/topics/`, { name })
-      .subscribe({
-        next: (topic) => {
-          this.newTopicName.set('');
-          this.pendingTopicSelection = topic.id;
-          this.selectTopic(topic.id, true);
-          this.loadTopics(topic.id);
-        },
-      });
+    this.chatDataService.createTopic(name).subscribe({
+      next: (topic) => {
+        this.newTopicName.set('');
+        this.pendingTopicSelection = topic.id;
+        this.selectTopic(topic.id, true);
+        this.loadTopics(topic.id);
+      },
+    });
   }
 
   private refreshTopicMetadata(topicId: number | null): void {
     if (!topicId) return;
 
-    this.http
-      .get<TopicDetail>(`${environment.apiUrl}/topics/${topicId}/`)
-      .subscribe({
-        next: (topic) => {
-          this.topics.update((entries) =>
-            entries.map((entry) =>
-              entry.id === topic.id
-                ? {
-                    id: topic.id,
-                    name: topic.name,
-                    message_count: topic.message_count,
-                  }
-                : entry
-            )
-          );
-        },
-      });
+    this.chatDataService.getTopicDetail(topicId).subscribe({
+      next: (topic) => {
+        this.topics.update((entries) =>
+          entries.map((entry) =>
+            entry.id === topic.id
+              ? {
+                  id: topic.id,
+                  name: topic.name,
+                  message_count: topic.message_count,
+                }
+              : entry
+          )
+        );
+      },
+    });
   }
 }
