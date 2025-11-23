@@ -1,28 +1,66 @@
-<div class="chat-container">
-  <div class="messages" #messagesContainer>
-    <div
-      *ngFor="let msg of messages"
-      class="message"
-      [ngClass]="{
-        'message--user': msg.from === 'user',
-        'message--assistant': msg.from === 'assistant',
-        'message--error': msg.isError
-      }"
-    >
-      <div class="message__bubble">{{ msg.content }}</div>
-    </div>
-  </div>
+<div class="chat-page">
+  <mat-card class="chat-card">
+    <mat-card-header>
+      <div mat-card-avatar class="chat-card__avatar">
+        <mat-icon>smart_toy</mat-icon>
+      </div>
+      <mat-card-title>Assistant</mat-card-title>
+      <mat-card-subtitle>Posez une question sur votre code et obtenez une réponse contextualisée.</mat-card-subtitle>
+    </mat-card-header>
 
-  <form class="chat-input" (ngSubmit)="onSubmit()">
-    <textarea
-      [(ngModel)]="question"
-      name="question"
-      rows="2"
-      placeholder="Posez une question sur votre code..."
-      [disabled]="isSending"
-    ></textarea>
-    <button type="submit" [disabled]="isSending || !question.trim()">
-      {{ isSending ? 'Envoi...' : 'Envoyer' }}
-    </button>
-  </form>
+    <mat-card-content>
+      <div class="messages" #messagesContainer>
+        <div *ngIf="messages.length === 0" class="empty-state">
+          <mat-icon aria-hidden="true">chat_bubble_outline</mat-icon>
+          <p>Commencez la conversation pour obtenir de l'aide sur votre projet.</p>
+        </div>
+
+        <div
+          *ngFor="let msg of messages"
+          class="message"
+          [ngClass]="{
+            'message--user': msg.from === 'user',
+            'message--assistant': msg.from === 'assistant',
+            'message--error': msg.isError
+          }"
+        >
+          <div class="message__bubble">
+            <mat-icon class="message__icon" aria-hidden="true">
+              {{ msg.from === 'user' ? 'person' : msg.isError ? 'error' : 'smart_toy' }}
+            </mat-icon>
+            <div class="message__content">{{ msg.content }}</div>
+          </div>
+        </div>
+      </div>
+    </mat-card-content>
+
+    <mat-divider></mat-divider>
+
+    <form class="chat-input" (ngSubmit)="onSubmit()">
+      <mat-form-field class="chat-input__field" appearance="outline">
+        <mat-label>Votre message</mat-label>
+        <textarea
+          matInput
+          [(ngModel)]="question"
+          name="question"
+          rows="2"
+          placeholder="Posez une question sur votre code..."
+          [disabled]="isSending"
+          (keydown.space)="onSpaceSend($event)"
+        ></textarea>
+        <mat-hint>Appuyez sur la barre d'espace pour envoyer directement.</mat-hint>
+      </mat-form-field>
+
+      <button mat-flat-button color="primary" type="submit" [disabled]="isSending || !question.trim()">
+        <mat-progress-spinner
+          *ngIf="isSending"
+          mode="indeterminate"
+          diameter="18"
+          strokeWidth="3"
+        ></mat-progress-spinner>
+        <mat-icon *ngIf="!isSending" aria-hidden="true">send</mat-icon>
+        <span>{{ isSending ? 'Envoi...' : 'Envoyer' }}</span>
+      </button>
+    </form>
+  </mat-card>
 </div>

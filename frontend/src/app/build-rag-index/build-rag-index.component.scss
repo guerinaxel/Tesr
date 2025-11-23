@@ -1,84 +1,56 @@
 .rag-builder {
-  max-width: 640px;
+  max-width: 720px;
   margin: 2rem auto;
-  padding: 1.5rem;
-  border: 1px solid #e2e2e2;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  padding: 0 1rem;
 }
 
-.rag-builder__description {
-  color: #555;
-  margin-bottom: 1.5rem;
+mat-card {
+  box-shadow: 0 10px 30px rgba(25, 118, 210, 0.12);
+}
+
+mat-card-subtitle {
+  color: #5f6b7a;
 }
 
 .rag-builder__form {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 1rem;
+  margin-top: 0.5rem;
 }
 
-.rag-builder__label {
-  font-weight: 600;
-}
-
-.rag-builder input {
-  padding: 0.6rem 0.75rem;
-  border-radius: 8px;
-  border: 1px solid #ccc;
-  font-size: 1rem;
-}
-
-.rag-builder button {
+.rag-builder__form button {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.55rem 1.2rem;
-  border-radius: 8px;
-  background-color: #007aff;
-  color: #fff;
-  border: none;
-  cursor: pointer;
-  transition: background-color 0.2s ease-in-out;
+  gap: 0.45rem;
+  padding: 0.65rem 1.25rem;
 }
 
-.rag-builder button[disabled] {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.rag-builder button:not([disabled]):hover {
-  background-color: #0065d0;
-}
-
-.spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid #e6e6e6;
-  border-top: 2px solid #fff;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+.rag-builder__form .mat-mdc-progress-spinner {
+  --mdc-circular-progress-active-indicator-color: #fff;
 }
 
 .toast {
   margin-top: 1rem;
   padding: 0.75rem 1rem;
-  border-radius: 8px;
-  color: #0f5132;
-  background-color: #d1e7dd;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   border: 1px solid #badbcc;
+  background-color: #d1e7dd;
+  color: #0f5132;
 }
 
 .toast--error {
-  color: #842029;
   background-color: #f8d7da;
   border-color: #f5c2c7;
+  color: #842029;
+}
+
+.toast mat-icon {
+  font-size: 20px;
+  height: 20px;
+  width: 20px;
 }

@@ -2,6 +2,14 @@ import { Component, inject, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
+import { MatDividerModule } from '@angular/material/divider';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+
 import { environment } from '../../environments/environment';
 
 interface ChatMessage {
@@ -19,7 +27,17 @@ interface CodeQaResponse {
 @Component({
   selector: 'app-chat',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [
+    CommonModule,
+    FormsModule,
+    MatButtonModule,
+    MatCardModule,
+    MatDividerModule,
+    MatFormFieldModule,
+    MatIconModule,
+    MatInputModule,
+    MatProgressSpinnerModule,
+  ],
   templateUrl: './chat.component.html',
   styleUrls: ['./chat.component.scss'],
 })
@@ -47,6 +65,7 @@ export class ChatComponent {
     this.messages = [...this.messages, userMsg];
     this.question = '';
     this.isSending = true;
+    this.scrollToBottom();
 
     this.http
       .post<CodeQaResponse>(`${environment.apiUrl}/code-qa/`, { question: text })
@@ -75,6 +94,20 @@ export class ChatComponent {
           this.scrollToBottom();
         },
       });
+  }
+
+  onSpaceSend(event: KeyboardEvent): void {
+    if (this.isSending) {
+      return;
+    }
+
+    const text = this.question.trim();
+    if (!text) {
+      return;
+    }
+
+    event.preventDefault();
+    this.onSubmit();
   }
 
   private scrollToBottom(): void {

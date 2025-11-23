@@ -1,10 +1,24 @@
-<nav class="app-nav">
-  <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
-    Chat
-  </a>
-  <a routerLink="/build-rag" routerLinkActive="active">Build RAG Index</a>
-</nav>
+<div class="app-shell">
+  <mat-toolbar color="primary" class="app-toolbar" role="navigation">
+    <button
+      mat-button
+      routerLink="/"
+      routerLinkActive="active"
+      [routerLinkActiveOptions]="{ exact: true }"
+    >
+      <mat-icon aria-hidden="true">chat</mat-icon>
+      <span>Chat</span>
+    </button>
 
-<main class="app-main">
-  <router-outlet></router-outlet>
-</main>
+    <span class="toolbar-spacer"></span>
+
+    <button mat-button routerLink="/build-rag" routerLinkActive="active">
+      <mat-icon aria-hidden="true">build</mat-icon>
+      <span>Build RAG Index</span>
+    </button>
+  </mat-toolbar>
+
+  <main class="app-main">
+    <router-outlet></router-outlet>
+  </main>
+</div>

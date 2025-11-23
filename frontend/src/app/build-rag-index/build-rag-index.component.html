@@ -1,35 +1,55 @@
 <section class="rag-builder">
-  <h1>Build RAG Index</h1>
-  <p class="rag-builder__description">
-    Provide a project root (optional) to trigger the backend index build.
-  </p>
+  <mat-card>
+    <mat-card-header>
+      <mat-card-title>Build RAG Index</mat-card-title>
+      <mat-card-subtitle>
+        Fournissez un chemin racine (facultatif) pour lancer la construction de l'index côté backend.
+      </mat-card-subtitle>
+    </mat-card-header>
 
-  <form class="rag-builder__form" (ngSubmit)="onSubmit()">
-    <label class="rag-builder__label" for="rootInput">Project root</label>
-    <input
-      id="rootInput"
-      name="root"
-      type="text"
-      [(ngModel)]="root"
-      placeholder="/workspace/project"
-      [disabled]="isSubmitting"
-    />
+    <mat-card-content>
+      <form class="rag-builder__form" (ngSubmit)="onSubmit()">
+        <mat-form-field appearance="outline">
+          <mat-label>Project root</mat-label>
+          <input
+            matInput
+            id="rootInput"
+            name="root"
+            type="text"
+            [(ngModel)]="root"
+            placeholder="/workspace/project"
+            [disabled]="isSubmitting"
+          />
+          <mat-icon matSuffix aria-hidden="true">folder</mat-icon>
+          <mat-hint>Optionnel&nbsp;: laissez vide pour la racine par défaut.</mat-hint>
+        </mat-form-field>
 
-    <button type="submit" [disabled]="isSubmitting">
-      <span *ngIf="isSubmitting" class="spinner" aria-hidden="true"></span>
-      {{ isSubmitting ? 'Sending...' : 'Send request' }}
-    </button>
-  </form>
+        <button mat-flat-button color="primary" type="submit" [disabled]="isSubmitting">
+          <mat-progress-spinner
+            *ngIf="isSubmitting"
+            mode="indeterminate"
+            diameter="18"
+            strokeWidth="3"
+          ></mat-progress-spinner>
+          <mat-icon *ngIf="!isSubmitting" aria-hidden="true">rocket_launch</mat-icon>
+          <span>{{ isSubmitting ? 'Envoi...' : 'Lancer la construction' }}</span>
+        </button>
+      </form>
 
-  <div
-    *ngIf="toast"
-    class="toast"
-    [ngClass]="{
-      'toast--success': toast.type === 'success',
-      'toast--error': toast.type === 'error'
-    }"
-    role="status"
-  >
-    {{ toast.message }}
-  </div>
+      <div
+        *ngIf="toast"
+        class="toast"
+        [ngClass]="{
+          'toast--success': toast.type === 'success',
+          'toast--error': toast.type === 'error'
+        }"
+        role="status"
+      >
+        <mat-icon aria-hidden="true">
+          {{ toast.type === 'success' ? 'check_circle' : 'error' }}
+        </mat-icon>
+        <span>{{ toast.message }}</span>
+      </div>
+    </mat-card-content>
+  </mat-card>
 </section>
