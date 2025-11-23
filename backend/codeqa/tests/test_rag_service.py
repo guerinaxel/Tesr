@@ -16,7 +16,9 @@ class RagServiceTests(SimpleTestCase):
 
         sys.modules["ollama"] = types.SimpleNamespace(
             ChatResponse=SimpleNamespace,
-            chat=lambda model, messages: SimpleNamespace(message=SimpleNamespace(content=f"answer from {model}")),
+            chat=lambda model, messages, **_kwargs: SimpleNamespace(
+                message=SimpleNamespace(content=f"answer from {model}")
+            ),
         )
         from codeqa import rag_index as rag_index_module
         importlib.reload(rag_index_module)
