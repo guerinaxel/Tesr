@@ -1,50 +1,50 @@
-import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { of, throwError } from 'rxjs';
 
-import { environment } from '../../environments/environment';
 import { ChatComponent } from './chat.component';
+import { ChatDataService } from './chat-data.service';
 
 
 describe('ChatComponent', () => {
   let fixture: ComponentFixture<ChatComponent>;
   let component: ChatComponent;
-  let httpMock: HttpTestingController;
+  let chatDataService: jasmine.SpyObj<ChatDataService>;
 
   beforeEach(async () => {
+    chatDataService = jasmine.createSpyObj<ChatDataService>(
+      'ChatDataService',
+      ['sendQuestion', 'getTopics', 'getTopicDetail', 'createTopic']
+    );
+
     await TestBed.configureTestingModule({
-      imports: [ChatComponent, HttpClientTestingModule, NoopAnimationsModule],
+      imports: [ChatComponent, NoopAnimationsModule],
+      providers: [{ provide: ChatDataService, useValue: chatDataService }],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ChatComponent);
     component = fixture.componentInstance;
-    httpMock = TestBed.inject(HttpTestingController);
 
     component.topics.set([{ id: 1, name: 'Default', message_count: 0 }]);
     component.selectedTopicId.set(1);
   });
 
-  afterEach(() => {
-    httpMock.verify();
-  });
-
   it('sends a question to the backend and appends the assistant answer', fakeAsync(() => {
     component.question.set('Explain RAG');
 
+    chatDataService.sendQuestion.and.returnValue(of({ answer: 'Contextual explanation' }));
+    chatDataService.getTopicDetail.and.returnValue(
+      of({ id: 1, name: 'Default', message_count: 2, messages: [] })
+    );
+
     component.onSubmit();
 
-    const req = httpMock.expectOne(`${environment.apiUrl}/code-qa/`);
-    expect(req.request.method).toBe('POST');
-    expect(req.request.body).toEqual({
+    expect(chatDataService.sendQuestion).toHaveBeenCalledWith({
       question: 'Explain RAG',
       system_prompt: 'code expert',
       topic_id: '1',
     });
-
-    req.flush({ answer: 'Contextual explanation' });
-
-    const refreshReq = httpMock.expectOne(`${environment.apiUrl}/topics/1/`);
-    refreshReq.flush({ id: 1, name: 'Default', message_count: 2, messages: [] });
+    expect(chatDataService.getTopicDetail).toHaveBeenCalledWith(1);
 
     expect(component.messages()[0]).toEqual(
       jasmine.objectContaining({ from: 'user', content: 'Explain RAG' })
@@ -61,34 +61,32 @@ describe('ChatComponent', () => {
     component.systemPrompt.set('custom');
     component.customPrompt.set('You are concise');
 
+    chatDataService.sendQuestion.and.returnValue(of({ answer: 'Acknowledged' }));
+    chatDataService.getTopicDetail.and.returnValue(
+      of({ id: 1, name: 'Default', message_count: 2, messages: [] })
+    );
+
     component.onSubmit();
 
-    const req = httpMock.expectOne(`${environment.apiUrl}/code-qa/`);
-    expect(req.request.body).toEqual({
+    expect(chatDataService.sendQuestion).toHaveBeenCalledWith({
       question: 'Customise the system',
       system_prompt: 'custom',
       custom_prompt: 'You are concise',
       topic_id: '1',
     });
-
-    req.flush({ answer: 'Acknowledged' });
-
-    const refreshReq = httpMock.expectOne(`${environment.apiUrl}/topics/1/`);
-    refreshReq.flush({ id: 1, name: 'Default', message_count: 2, messages: [] });
   });
 
   it('sends the message when pressing ctrl+space with content', () => {
     component.question.set('Quick send');
 
+    chatDataService.sendQuestion.and.returnValue(of({ answer: 'Delivered' }));
+    chatDataService.getTopicDetail.and.returnValue(
+      of({ id: 1, name: 'Default', message_count: 2, messages: [] })
+    );
+
     component.onSpaceSend(
       new KeyboardEvent('keydown', { key: ' ', ctrlKey: true })
     );
-
-    const req = httpMock.expectOne(`${environment.apiUrl}/code-qa/`);
-    req.flush({ answer: 'Delivered' });
-
-    const refreshReq = httpMock.expectOne(`${environment.apiUrl}/topics/1/`);
-    refreshReq.flush({ id: 1, name: 'Default', message_count: 2, messages: [] });
 
     expect(component.messages()[0]).toEqual(
       jasmine.objectContaining({ from: 'user', content: 'Quick send' })
@@ -103,7 +101,7 @@ describe('ChatComponent', () => {
 
     component.onSpaceSend(new KeyboardEvent('keydown', { key: ' ' }));
 
-    httpMock.expectNone(`${environment.apiUrl}/code-qa/`);
+    expect(chatDataService.sendQuestion).not.toHaveBeenCalled();
     expect(component.messages().length).toBe(0);
     expect(component.isSending()).toBeFalse();
   });
@@ -115,7 +113,7 @@ describe('ChatComponent', () => {
 
     component.onSubmit();
 
-    httpMock.expectNone(`${environment.apiUrl}/code-qa/`);
+    expect(chatDataService.sendQuestion).not.toHaveBeenCalled();
     expect(component.messages().length).toBe(0);
     expect(component.isSending()).toBeFalse();
   });
@@ -125,7 +123,7 @@ describe('ChatComponent', () => {
 
     component.onSubmit();
 
-    httpMock.expectNone(`${environment.apiUrl}/code-qa/`);
+    expect(chatDataService.sendQuestion).not.toHaveBeenCalled();
     expect(component.messages().length).toBe(0);
     expect(component.isSending()).toBeFalse();
   });
@@ -133,9 +131,11 @@ describe('ChatComponent', () => {
   it('shows an error message when the API call fails', fakeAsync(() => {
     component.question.set('Trigger error');
 
+    chatDataService.sendQuestion.and.returnValue(
+      throwError(() => ({ error: { detail: 'Service unavailable' } }))
+    );
+
     component.onSubmit();
-    const req = httpMock.expectOne(`${environment.apiUrl}/code-qa/`);
-    req.flush({ detail: 'Service unavailable' }, { status: 503, statusText: 'Service Unavailable' });
 
     const errorMessage = component.messages()[component.messages().length - 1];
     expect(errorMessage?.isError).toBeTrue();
@@ -147,27 +147,24 @@ describe('ChatComponent', () => {
   it('creates a new topic and loads it', () => {
     component.newTopicName.set('Feature A');
 
+    chatDataService.createTopic.and.returnValue(
+      of({ id: 2, name: 'Feature A', message_count: 0, messages: [] })
+    );
+    chatDataService.getTopicDetail.and.returnValue(
+      of({ id: 2, name: 'Feature A', message_count: 0, messages: [] })
+    );
+    chatDataService.getTopics.and.returnValue(
+      of({
+        topics: [
+          { id: 1, name: 'Default', message_count: 0 },
+          { id: 2, name: 'Feature A', message_count: 0 },
+        ],
+      })
+    );
+
     component.createTopic();
 
-    const req = httpMock.expectOne(`${environment.apiUrl}/topics/`);
-    expect(req.request.method).toBe('POST');
-    req.flush({
-      id: 2,
-      name: 'Feature A',
-      message_count: 0,
-      messages: [],
-    });
-
-    const detailReq = httpMock.expectOne(`${environment.apiUrl}/topics/2/`);
-    detailReq.flush({ id: 2, name: 'Feature A', message_count: 0, messages: [] });
-
-    const listReq = httpMock.expectOne(`${environment.apiUrl}/topics/`);
-    listReq.flush({
-      topics: [
-        { id: 1, name: 'Default', message_count: 0 },
-        { id: 2, name: 'Feature A', message_count: 0 },
-      ],
-    });
+    expect(chatDataService.createTopic).toHaveBeenCalledWith('Feature A');
 
     expect(component.topics().length).toBe(2);
     expect(component.selectedTopicId()).toBe(2);
@@ -177,26 +174,27 @@ describe('ChatComponent', () => {
   it('loads topics from the API and selects the most recent when none is chosen', () => {
     component.selectedTopicId.set(null);
 
+    chatDataService.getTopics.and.returnValue(
+      of({
+        topics: [
+          { id: 5, name: 'Earlier', message_count: 2 },
+          { id: 6, name: 'Latest', message_count: 4 },
+        ],
+      })
+    );
+    chatDataService.getTopicDetail.and.returnValue(
+      of({
+        id: 6,
+        name: 'Latest',
+        message_count: 4,
+        messages: [
+          { role: 'user', content: 'Hi' },
+          { role: 'assistant', content: 'Hello' },
+        ],
+      })
+    );
+
     component.loadTopics();
-
-    const listReq = httpMock.expectOne(`${environment.apiUrl}/topics/`);
-    listReq.flush({
-      topics: [
-        { id: 5, name: 'Earlier', message_count: 2 },
-        { id: 6, name: 'Latest', message_count: 4 },
-      ],
-    });
-
-    const detailReq = httpMock.expectOne(`${environment.apiUrl}/topics/6/`);
-    detailReq.flush({
-      id: 6,
-      name: 'Latest',
-      message_count: 4,
-      messages: [
-        { role: 'user', content: 'Hi' },
-        { role: 'assistant', content: 'Hello' },
-      ],
-    });
 
     expect(component.selectedTopicId()).toBe(6);
     expect(component.messages().length).toBe(2);
@@ -213,18 +211,19 @@ describe('ChatComponent', () => {
     ]);
     component.selectedTopicId.set(1);
 
-    component.selectTopic(2);
+    chatDataService.getTopicDetail.and.returnValue(
+      of({
+        id: 2,
+        name: 'Follow-up',
+        message_count: 2,
+        messages: [
+          { role: 'user', content: 'Question' },
+          { role: 'assistant', content: 'Answer' },
+        ],
+      })
+    );
 
-    const detailReq = httpMock.expectOne(`${environment.apiUrl}/topics/2/`);
-    detailReq.flush({
-      id: 2,
-      name: 'Follow-up',
-      message_count: 2,
-      messages: [
-        { role: 'user', content: 'Question' },
-        { role: 'assistant', content: 'Answer' },
-      ],
-    });
+    component.selectTopic(2);
 
     expect(component.selectedTopicId()).toBe(2);
     expect(component.messages()[1]).toEqual(
