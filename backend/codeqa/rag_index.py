@@ -25,7 +25,12 @@ class RagIndex:
             model_kwargs["trust_remote_code"] = True
 
         self._model = SentenceTransformer(config.embedding_model_name, **model_kwargs)
-        self._embedding_dim = self._model.get_sentence_embedding_dimension()
+
+        # Not all SentenceTransformer-compatible models expose a helper to report their
+        # embedding dimension (e.g., the test FakeModel). Fall back to None and rely on
+        # runtime encodes if unavailable.
+        get_dim = getattr(self._model, "get_sentence_embedding_dimension", None)
+        self._embedding_dim: int | None = get_dim() if callable(get_dim) else None
         self._index: faiss.IndexFlatIP | None = None
         self._docs: List[str] = []
 
@@ -71,7 +76,7 @@ class RagIndex:
         except Exception as exc:  # pragma: no cover - defensive path
             raise FileNotFoundError("RAG index or docs file is missing.") from exc
 
-        if index.d != self._embedding_dim:
+        if self._embedding_dim is not None and index.d != self._embedding_dim:
             index = self._rebuild_index_from_docs(docs)
 
         self._index = index
