@@ -30,7 +30,10 @@ jobs:
       - name: Install Python requirements
         env:
           PIP_CACHE_DIR: ~/.cache/pip
-        run: pip install --cache-dir "$PIP_CACHE_DIR" -r requirements.txt
+        run: pip install --cache-dir "$PIP_CACHE_DIR" -r requirements.txt ruff
+
+      - name: Run Ruff lint checks
+        run: ruff check .
 
       - name: Run Django tests
         id: backend_tests
@@ -90,15 +93,17 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Run ESLint
+        run: npm run lint
+
       - name: Run Angular tests
         id: frontend_tests
         continue-on-error: true
         env:
           CI: true
-          CHROME_BIN: /usr/bin/google-chrome
         run: |
           mkdir -p test-results
-          npm run test:ci
+          CHROME_BIN=$(node -e "console.log(require('puppeteer').executablePath())") npm run test:ci
 
       - name: Summarize frontend test results
         if: always()

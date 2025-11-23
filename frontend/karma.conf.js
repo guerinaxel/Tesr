@@ -3,8 +3,13 @@
 
 const fs = require('fs');
 const path = require('path');
+const puppeteer = require('puppeteer');
 
 const isCI = !!process.env.CI;
+
+if (!process.env.CHROME_BIN) {
+  process.env.CHROME_BIN = puppeteer.executablePath();
+}
 
 module.exports = function (config) {
   const junitOutputDir = path.resolve(
