@@ -107,6 +107,11 @@ jobs:
           comment_tag: frontend-test-results
           check_run: false
 
+      - name: Run Cypress end-to-end tests
+        env:
+          CI: true
+        run: npm run e2e
+
       - name: Fail if tests failed
         if: steps.frontend_tests.outcome == 'failure'
         run: exit 1

@@ -19,12 +19,19 @@
             [(ngModel)]="root"
             placeholder="/workspace/project"
             [disabled]="isSubmitting"
+            data-cy="root-input"
           />
           <mat-icon matSuffix aria-hidden="true">folder</mat-icon>
           <mat-hint>Optionnel&nbsp;: laissez vide pour la racine par défaut.</mat-hint>
         </mat-form-field>
 
-        <button mat-flat-button color="primary" type="submit" [disabled]="isSubmitting">
+        <button
+          mat-flat-button
+          color="primary"
+          type="submit"
+          [disabled]="isSubmitting"
+          data-cy="launch-button"
+        >
           <mat-progress-spinner
             *ngIf="isSubmitting"
             mode="indeterminate"
@@ -44,6 +51,7 @@
           'toast--error': toast.type === 'error'
         }"
         role="status"
+        data-cy="toast"
       >
         <mat-icon aria-hidden="true">
           {{ toast.type === 'success' ? 'check_circle' : 'error' }}

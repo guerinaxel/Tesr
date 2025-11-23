@@ -77,7 +77,7 @@ export class ChatComponent {
             content: res.answer ?? '(empty answer)',
           };
           this.messages = [...this.messages, aiMsg];
-          this.isSending = false;
+          this.finishSending();
           this.scrollToBottom();
         },
         error: (err) => {
@@ -90,13 +90,17 @@ export class ChatComponent {
             isError: true,
           };
           this.messages = [...this.messages, errorMsg];
-          this.isSending = false;
+          this.finishSending();
           this.scrollToBottom();
         },
       });
   }
 
   onSpaceSend(event: KeyboardEvent): void {
+    if (!event.ctrlKey && !event.metaKey) {
+      return;
+    }
+
     if (this.isSending) {
       return;
     }
@@ -116,5 +120,11 @@ export class ChatComponent {
     setTimeout(() => {
       el.scrollTop = el.scrollHeight;
     }, 0);
+  }
+
+  private finishSending(): void {
+    setTimeout(() => {
+      this.isSending = false;
+    }, 200);
   }
 }
