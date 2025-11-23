@@ -158,6 +158,9 @@ describe('ChatComponent', () => {
       messages: [],
     });
 
+    const detailReq = httpMock.expectOne(`${environment.apiUrl}/topics/2/`);
+    detailReq.flush({ id: 2, name: 'Feature A', message_count: 0, messages: [] });
+
     const listReq = httpMock.expectOne(`${environment.apiUrl}/topics/`);
     listReq.flush({
       topics: [
@@ -165,9 +168,6 @@ describe('ChatComponent', () => {
         { id: 2, name: 'Feature A', message_count: 0 },
       ],
     });
-
-    const detailReq = httpMock.expectOne(`${environment.apiUrl}/topics/2/`);
-    detailReq.flush({ id: 2, name: 'Feature A', message_count: 0, messages: [] });
 
     expect(component.topics.length).toBe(2);
     expect(component.selectedTopicId).toBe(2);

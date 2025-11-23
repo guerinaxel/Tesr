@@ -246,6 +246,7 @@ export class ChatComponent implements OnInit {
         next: (topic) => {
           this.newTopicName = '';
           this.pendingTopicSelection = topic.id;
+          this.selectTopic(topic.id);
           this.loadTopics(topic.id);
         },
       });

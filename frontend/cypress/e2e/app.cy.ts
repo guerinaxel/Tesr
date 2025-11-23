@@ -106,6 +106,7 @@ describe('AI Code Assistant app', () => {
 
     cy.wait('@createTopic');
     cy.wait('@topicDetail');
+    cy.wait('@listTopics');
 
     cy.contains('[data-cy="topic-item"]', 'New thread').should('have.class', 'selected');
     cy.get('[data-cy="empty-state"]').should('contain', 'Commencez la conversation');
