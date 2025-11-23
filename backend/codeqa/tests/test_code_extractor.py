@@ -78,6 +78,97 @@ class CollectCodeChunksTests(SimpleTestCase):
             any("File: sample.docx" in chunk and "Hello Word Doc" in chunk for chunk in chunks),
         )
 
+    def test_python_ast_chunking_with_nested_defs(self) -> None:
+        python_path = self.root_path / "sample.py"
+        python_path.write_text(
+            """
+class Outer:
+    def method_one(self):
+        def inner():
+            return "hi"
+        return inner()
+
+
+def standalone(value):
+    return value * 2
+""".strip()
+        )
+
+        chunks = collect_code_chunks(self.root_path)
+
+        self.assertTrue(any("class Outer" in chunk for chunk in chunks))
+        self.assertTrue(any("def standalone" in chunk for chunk in chunks))
+
+    def test_typescript_ast_chunking_and_large_nodes(self) -> None:
+        ts_path = self.root_path / "sample.ts"
+        big_body = "\n".join("console.log('line')" for _ in range(200))
+        ts_path.write_text(
+            f"""
+class Service {{
+    method() {{
+{big_body}
+    }}
+}}
+
+function helper(x: number) {{
+    return x + 1;
+}}
+""".strip()
+        )
+
+        chunks = collect_code_chunks(self.root_path)
+
+        ts_chunks = [chunk for chunk in chunks if "sample.ts" in chunk]
+        self.assertTrue(any("class Service" in chunk for chunk in ts_chunks))
+        self.assertTrue(any("function helper" in chunk for chunk in ts_chunks))
+        self.assertTrue(any(len(chunk.splitlines()) > 50 for chunk in ts_chunks))
+
+    def test_typescript_falls_back_to_line_chunking_on_error(self) -> None:
+        ts_path = self.root_path / "broken.ts"
+        ts_path.write_text("function example() { return 'oops' " " ")
+
+        with patch("codeqa.code_extractor.chunk_code_with_ast", side_effect=ValueError("parse err")):
+            with patch(
+                "codeqa.code_extractor.chunk_text",
+                wraps=collect_code_chunks.__globals__["chunk_text"],
+            ) as mock_chunk:
+                chunks = collect_code_chunks(self.root_path)
+
+        ts_chunks = [chunk for chunk in chunks if "broken.ts" in chunk]
+        self.assertTrue(ts_chunks)
+        self.assertTrue(any("oops" in chunk for chunk in ts_chunks))
+        self.assertGreaterEqual(mock_chunk.call_count, 1)
+
+    def test_html_uses_text_chunking(self) -> None:
+        html_path = self.root_path / "index.html"
+        repeated = "\n".join(f"<p>line {i}</p>" for i in range(100))
+        html_path.write_text(f"<html><body>\n{repeated}\n</body></html>")
+
+        chunks = collect_code_chunks(self.root_path)
+
+        html_chunks = [chunk for chunk in chunks if "index.html" in chunk]
+        self.assertTrue(html_chunks)
+        self.assertTrue(any("<html>" in chunk for chunk in html_chunks))
+        self.assertGreater(len(html_chunks), 1)
+
+    def test_pdf_and_docx_are_chunked_after_extraction(self) -> None:
+        pdf_path = self.root_path / "sample.pdf"
+        pdf_path.write_bytes(PDF_CONTENT)
+        docx_path = self.root_path / "sample.docx"
+        document = Document()
+        document.add_paragraph("Hello Word Doc")
+        document.save(docx_path)
+
+        with patch(
+            "codeqa.code_extractor.chunk_text",
+            wraps=collect_code_chunks.__globals__["chunk_text"],
+        ) as mock_chunk:
+            chunks = collect_code_chunks(self.root_path)
+
+        self.assertTrue(any("File: sample.pdf" in chunk for chunk in chunks))
+        self.assertTrue(any("File: sample.docx" in chunk for chunk in chunks))
+        self.assertGreaterEqual(mock_chunk.call_count, 2)
+
 
 class ExtractPdfTextTests(SimpleTestCase):
     def setUp(self) -> None:
