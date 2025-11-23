@@ -116,10 +116,29 @@ jobs:
           check_run: false
 
       - name: Run Cypress end-to-end tests
+        id: cypress_tests
+        continue-on-error: true
         env:
           CI: true
-        run: npm run e2e
+        run: |
+          mkdir -p test-results/cypress
+          npm run e2e
+
+      - name: Summarize Cypress test results
+        if: always()
+        run: python ../.github/utils/summarize_junit.py --results-dir test-results/cypress --heading "Cypress E2E Test Details"
+
+      - name: Publish Cypress test results
+        if: always() && hashFiles('frontend/test-results/cypress/**/*.xml') != ''
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: frontend/test-results/cypress/**/*.xml
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          comment_mode: always
+          comment_title: Cypress E2E Test Results
+          comment_tag: cypress-test-results
+          check_run: false
 
       - name: Fail if tests failed
-        if: steps.frontend_tests.outcome == 'failure'
+        if: steps.frontend_tests.outcome == 'failure' || steps.cypress_tests.outcome == 'failure'
         run: exit 1
