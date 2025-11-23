@@ -45,10 +45,12 @@ describe('ChatComponent', () => {
     expect(component.isSending).toBeFalse();
   });
 
-  it('sends the message when pressing space with content', () => {
+  it('sends the message when pressing ctrl+space with content', () => {
     component.question = 'Quick send';
 
-    component.onSpaceSend(new KeyboardEvent('keydown', { key: ' ' }));
+    component.onSpaceSend(
+      new KeyboardEvent('keydown', { key: ' ', ctrlKey: true })
+    );
 
     const req = httpMock.expectOne(`${environment.apiUrl}/code-qa/`);
     req.flush({ answer: 'Delivered' });
@@ -59,6 +61,16 @@ describe('ChatComponent', () => {
     expect(component.messages[1]).toEqual(
       jasmine.objectContaining({ from: 'assistant', content: 'Delivered' })
     );
+  });
+
+  it('does not send the message when pressing space without modifiers', () => {
+    component.question = 'Should stay';
+
+    component.onSpaceSend(new KeyboardEvent('keydown', { key: ' ' }));
+
+    httpMock.expectNone(`${environment.apiUrl}/code-qa/`);
+    expect(component.messages.length).toBe(0);
+    expect(component.isSending).toBeFalse();
   });
 
   it('does not send a request for blank input', () => {
