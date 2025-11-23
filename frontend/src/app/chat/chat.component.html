@@ -16,7 +16,8 @@
         <mat-label>Nom du topic</mat-label>
         <input
           matInput
-          [(ngModel)]="newTopicName"
+          [ngModel]="newTopicName()"
+          (ngModelChange)="newTopicName.set($event)"
           name="newTopicName"
           placeholder="Ex: Sprint 12"
           data-cy="new-topic-input"
@@ -27,22 +28,23 @@
       </button>
     </form>
 
-    <mat-nav-list class="topics-panel__list" *ngIf="topics.length; else noTopics">
-      <a
-        mat-list-item
-        *ngFor="let topic of topics"
-        (click)="selectTopic(topic.id)"
-        [class.selected]="topic.id === selectedTopicId"
-        data-cy="topic-item"
-      >
-        <div matLine class="topic__name">{{ topic.name }}</div>
-        <div matLine class="topic__meta">{{ topic.message_count }} messages</div>
-      </a>
-    </mat-nav-list>
-
-    <ng-template #noTopics>
+    @if (hasTopics()) {
+      <mat-nav-list class="topics-panel__list">
+        @for (topic of topics(); track topic.id) {
+          <a
+            mat-list-item
+            (click)="selectTopic(topic.id)"
+            [class.selected]="topic.id === selectedTopicId()"
+            data-cy="topic-item"
+          >
+            <div matLine class="topic__name">{{ topic.name }}</div>
+            <div matLine class="topic__meta">{{ topic.message_count }} messages</div>
+          </a>
+        }
+      </mat-nav-list>
+    } @else {
       <div class="topics-panel__empty">Aucun topic. Créez-en un pour démarrer.</div>
-    </ng-template>
+    }
   </aside>
 
   <div class="chat-page">
@@ -57,29 +59,40 @@
 
       <mat-card-content>
         <div class="messages" #messagesContainer data-cy="messages">
-          <div *ngIf="messages.length === 0" class="empty-state" data-cy="empty-state">
-            <mat-icon aria-hidden="true">chat_bubble_outline</mat-icon>
-            <p>
-              {{ selectedTopicId ? 'Commencez la conversation pour obtenir de l\'aide sur votre projet.' : 'Sélectionnez ou créez un topic pour démarrer.' }}
-            </p>
-          </div>
-
-          <div
-            *ngFor="let msg of messages"
-            class="message"
-            [ngClass]="{
-              'message--user': msg.from === 'user',
-              'message--assistant': msg.from === 'assistant',
-              'message--error': msg.isError
-            }"
-          >
-            <div class="message__bubble">
-              <mat-icon class="message__icon" aria-hidden="true">
-                {{ msg.from === 'user' ? 'person' : msg.isError ? 'error' : 'smart_toy' }}
-              </mat-icon>
-              <div class="message__content">{{ msg.content }}</div>
+          @if (!hasMessages()) {
+            <div class="empty-state" data-cy="empty-state">
+              <mat-icon aria-hidden="true">chat_bubble_outline</mat-icon>
+              <p>{{ emptyStateText() }}</p>
             </div>
-          </div>
+          }
+
+          @for (msg of messages(); track msg.id) {
+            <div
+              class="message"
+              [ngClass]="{
+                'message--user': msg.from === 'user',
+                'message--assistant': msg.from === 'assistant',
+                'message--error': msg.isError
+              }"
+            >
+              <div class="message__bubble">
+                <mat-icon class="message__icon" aria-hidden="true">
+                  @switch (msg.isError ? 'error' : msg.from) {
+                    @case ('user') {
+                      person
+                    }
+                    @case ('assistant') {
+                      smart_toy
+                    }
+                    @case ('error') {
+                      error
+                    }
+                  }
+                </mat-icon>
+                <div class="message__content">{{ msg.content }}</div>
+              </div>
+            </div>
+          }
         </div>
       </mat-card-content>
 
@@ -90,7 +103,8 @@
           <mat-form-field class="chat-input__system-prompt" appearance="outline">
             <mat-label>System prompt</mat-label>
             <mat-select
-              [(ngModel)]="systemPrompt"
+              [ngModel]="systemPrompt()"
+              (ngModelChange)="systemPrompt.set($event)"
               name="systemPrompt"
               data-cy="system-prompt-select"
             >
@@ -101,27 +115,30 @@
           </mat-form-field>
 
           <div class="chat-input__message-area">
-            <mat-form-field
-              *ngIf="systemPrompt === 'custom'"
-              class="chat-input__custom"
-              appearance="outline"
-              floatLabel="always"
-            >
-              <mat-label>Custom prompt</mat-label>
-              <input
-                matInput
-                [(ngModel)]="customPrompt"
-                name="customPrompt"
-                placeholder="Définissez votre propre système"
-                data-cy="custom-prompt-input"
-              />
-            </mat-form-field>
+            @if (isCustomPrompt()) {
+              <mat-form-field
+                class="chat-input__custom"
+                appearance="outline"
+                floatLabel="always"
+              >
+                <mat-label>Custom prompt</mat-label>
+                <input
+                  matInput
+                  [ngModel]="customPrompt()"
+                  (ngModelChange)="customPrompt.set($event)"
+                  name="customPrompt"
+                  placeholder="Définissez votre propre système"
+                  data-cy="custom-prompt-input"
+                />
+              </mat-form-field>
+            }
 
             <mat-form-field class="chat-input__field" appearance="outline">
               <mat-label>Votre message</mat-label>
               <textarea
                 matInput
-                [(ngModel)]="question"
+                [ngModel]="question()"
+                (ngModelChange)="question.set($event)"
                 name="question"
                 rows="2"
                 placeholder="Posez une question sur votre code..."
@@ -136,17 +153,19 @@
             mat-flat-button
             color="primary"
             type="submit"
-            [disabled]="isSending"
+            [disabled]="isSending()"
             data-cy="send-button"
           >
-            <mat-progress-spinner
-              *ngIf="isSending"
-              mode="indeterminate"
-              diameter="18"
-              strokeWidth="3"
-            ></mat-progress-spinner>
-            <mat-icon *ngIf="!isSending" aria-hidden="true">send</mat-icon>
-            <span>{{ isSending ? 'Envoi...' : 'Envoyer' }}</span>
+            @if (isSending()) {
+              <mat-progress-spinner
+                mode="indeterminate"
+                diameter="18"
+                strokeWidth="3"
+              ></mat-progress-spinner>
+            } @else {
+              <mat-icon aria-hidden="true">send</mat-icon>
+            }
+            <span>{{ sendingLabel() }}</span>
           </button>
         </div>
       </form>
