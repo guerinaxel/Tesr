@@ -1,104 +1,155 @@
-<div class="chat-page">
-  <mat-card class="chat-card">
-    <mat-card-header>
-      <div mat-card-avatar class="chat-card__avatar">
-        <mat-icon>smart_toy</mat-icon>
+<div class="chat-layout">
+  <aside class="topics-panel">
+    <div class="topics-panel__header">
+      <div>
+        <h3>Topics</h3>
+        <p>Sélectionnez une conversation ou créez-en une nouvelle.</p>
       </div>
-      <mat-card-title>Assistant</mat-card-title>
-      <mat-card-subtitle>Posez une question sur votre code et obtenez une réponse contextualisée.</mat-card-subtitle>
-    </mat-card-header>
+      <button mat-stroked-button color="primary" type="button" (click)="createTopic()" data-cy="new-topic-button">
+        <mat-icon aria-hidden="true">add</mat-icon>
+        Nouveau topic
+      </button>
+    </div>
 
-    <mat-card-content>
-      <div class="messages" #messagesContainer data-cy="messages">
-        <div *ngIf="messages.length === 0" class="empty-state" data-cy="empty-state">
-          <mat-icon aria-hidden="true">chat_bubble_outline</mat-icon>
-          <p>Commencez la conversation pour obtenir de l'aide sur votre projet.</p>
+    <form class="topics-panel__create" (ngSubmit)="createTopic()">
+      <mat-form-field appearance="outline" class="topics-panel__input" floatLabel="always">
+        <mat-label>Nom du topic</mat-label>
+        <input
+          matInput
+          [(ngModel)]="newTopicName"
+          name="newTopicName"
+          placeholder="Ex: Sprint 12"
+          data-cy="new-topic-input"
+        />
+      </mat-form-field>
+      <button mat-flat-button color="primary" type="submit" data-cy="create-topic-button">
+        Créer
+      </button>
+    </form>
+
+    <mat-nav-list class="topics-panel__list" *ngIf="topics.length; else noTopics">
+      <a
+        mat-list-item
+        *ngFor="let topic of topics"
+        (click)="selectTopic(topic.id)"
+        [class.selected]="topic.id === selectedTopicId"
+        data-cy="topic-item"
+      >
+        <div matLine class="topic__name">{{ topic.name }}</div>
+        <div matLine class="topic__meta">{{ topic.message_count }} messages</div>
+      </a>
+    </mat-nav-list>
+
+    <ng-template #noTopics>
+      <div class="topics-panel__empty">Aucun topic. Créez-en un pour démarrer.</div>
+    </ng-template>
+  </aside>
+
+  <div class="chat-page">
+    <mat-card class="chat-card">
+      <mat-card-header>
+        <div mat-card-avatar class="chat-card__avatar">
+          <mat-icon>smart_toy</mat-icon>
         </div>
+        <mat-card-title>Assistant</mat-card-title>
+        <mat-card-subtitle>Posez une question sur votre code et obtenez une réponse contextualisée.</mat-card-subtitle>
+      </mat-card-header>
 
-        <div
-          *ngFor="let msg of messages"
-          class="message"
-          [ngClass]="{
-            'message--user': msg.from === 'user',
-            'message--assistant': msg.from === 'assistant',
-            'message--error': msg.isError
-          }"
-        >
-          <div class="message__bubble">
-            <mat-icon class="message__icon" aria-hidden="true">
-              {{ msg.from === 'user' ? 'person' : msg.isError ? 'error' : 'smart_toy' }}
-            </mat-icon>
-            <div class="message__content">{{ msg.content }}</div>
+      <mat-card-content>
+        <div class="messages" #messagesContainer data-cy="messages">
+          <div *ngIf="messages.length === 0" class="empty-state" data-cy="empty-state">
+            <mat-icon aria-hidden="true">chat_bubble_outline</mat-icon>
+            <p>
+              {{ selectedTopicId ? 'Commencez la conversation pour obtenir de l\'aide sur votre projet.' : 'Sélectionnez ou créez un topic pour démarrer.' }}
+            </p>
+          </div>
+
+          <div
+            *ngFor="let msg of messages"
+            class="message"
+            [ngClass]="{
+              'message--user': msg.from === 'user',
+              'message--assistant': msg.from === 'assistant',
+              'message--error': msg.isError
+            }"
+          >
+            <div class="message__bubble">
+              <mat-icon class="message__icon" aria-hidden="true">
+                {{ msg.from === 'user' ? 'person' : msg.isError ? 'error' : 'smart_toy' }}
+              </mat-icon>
+              <div class="message__content">{{ msg.content }}</div>
+            </div>
           </div>
         </div>
-      </div>
-    </mat-card-content>
+      </mat-card-content>
 
-    <mat-divider></mat-divider>
+      <mat-divider></mat-divider>
 
-    <form class="chat-input" (ngSubmit)="onSubmit()">
-      <div class="chat-input__row">
-        <mat-form-field class="chat-input__system-prompt" appearance="outline">
-          <mat-label>System prompt</mat-label>
-          <mat-select
-            [(ngModel)]="systemPrompt"
-            name="systemPrompt"
-            data-cy="system-prompt-select"
-          >
-            <mat-option value="code expert">code expert</mat-option>
-            <mat-option value="document expert">document expert</mat-option>
-            <mat-option value="custom">custom</mat-option>
-          </mat-select>
-        </mat-form-field>
-
-        <div class="chat-input__message-area">
-          <mat-form-field
-            *ngIf="systemPrompt === 'custom'"
-            class="chat-input__custom"
-            appearance="outline"
-          >
-            <mat-label>Custom prompt</mat-label>
-            <input
-              matInput
-              [(ngModel)]="customPrompt"
-              name="customPrompt"
-              placeholder="Définissez votre propre système"
-              data-cy="custom-prompt-input"
-            />
+      <form class="chat-input" (ngSubmit)="onSubmit()">
+        <div class="chat-input__row">
+          <mat-form-field class="chat-input__system-prompt" appearance="outline">
+            <mat-label>System prompt</mat-label>
+            <mat-select
+              [(ngModel)]="systemPrompt"
+              name="systemPrompt"
+              data-cy="system-prompt-select"
+            >
+              <mat-option value="code expert">code expert</mat-option>
+              <mat-option value="document expert">document expert</mat-option>
+              <mat-option value="custom">custom</mat-option>
+            </mat-select>
           </mat-form-field>
 
-          <mat-form-field class="chat-input__field" appearance="outline">
-            <mat-label>Votre message</mat-label>
-            <textarea
-              matInput
-              [(ngModel)]="question"
-              name="question"
-              rows="2"
-              placeholder="Posez une question sur votre code..."
-              (keydown.space)="onSpaceSend($event)"
-              data-cy="question-input"
-            ></textarea>
-            <mat-hint>Appuyez sur Ctrl+Espace (ou Cmd+Espace) pour envoyer directement.</mat-hint>
-          </mat-form-field>
+          <div class="chat-input__message-area">
+            <mat-form-field
+              *ngIf="systemPrompt === 'custom'"
+              class="chat-input__custom"
+              appearance="outline"
+              floatLabel="always"
+            >
+              <mat-label>Custom prompt</mat-label>
+              <input
+                matInput
+                [(ngModel)]="customPrompt"
+                name="customPrompt"
+                placeholder="Définissez votre propre système"
+                data-cy="custom-prompt-input"
+              />
+            </mat-form-field>
+
+            <mat-form-field class="chat-input__field" appearance="outline">
+              <mat-label>Votre message</mat-label>
+              <textarea
+                matInput
+                [(ngModel)]="question"
+                name="question"
+                rows="2"
+                placeholder="Posez une question sur votre code..."
+                (keydown.space)="onSpaceSend($event)"
+                data-cy="question-input"
+              ></textarea>
+              <mat-hint>Appuyez sur Ctrl+Espace (ou Cmd+Espace) pour envoyer directement.</mat-hint>
+            </mat-form-field>
+          </div>
+
+          <button
+            mat-flat-button
+            color="primary"
+            type="submit"
+            [disabled]="isSending"
+            data-cy="send-button"
+          >
+            <mat-progress-spinner
+              *ngIf="isSending"
+              mode="indeterminate"
+              diameter="18"
+              strokeWidth="3"
+            ></mat-progress-spinner>
+            <mat-icon *ngIf="!isSending" aria-hidden="true">send</mat-icon>
+            <span>{{ isSending ? 'Envoi...' : 'Envoyer' }}</span>
+          </button>
         </div>
-
-        <button
-          mat-flat-button
-          color="primary"
-          type="submit"
-          [disabled]="isSending"
-          data-cy="send-button"
-        >
-          <mat-progress-spinner
-            *ngIf="isSending"
-            mode="indeterminate"
-            diameter="18"
-            strokeWidth="3"
-          ></mat-progress-spinner>
-          <mat-icon *ngIf="!isSending" aria-hidden="true">send</mat-icon>
-          <span>{{ isSending ? 'Envoi...' : 'Envoyer' }}</span>
-        </button>
-      </div>
-    </form>
-  </mat-card>
+      </form>
+    </mat-card>
+  </div>
 </div>
