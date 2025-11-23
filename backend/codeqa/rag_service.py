@@ -25,11 +25,22 @@ def _get_paths_from_env() -> tuple[Path, Path]:
     return index_path, docs_path
 
 
+def _build_config_from_env() -> RagConfig:
+    index_path, docs_path = _get_paths_from_env()
+    embedding_model_name = os.getenv(
+        "RAG_EMBED_MODEL", RagConfig.embedding_model_name
+    )
+    return RagConfig(
+        index_path=index_path,
+        docs_path=docs_path,
+        embedding_model_name=embedding_model_name,
+    )
+
+
 def get_rag_index() -> RagIndex:
     global _rag_index
     if _rag_index is None:
-        index_path, docs_path = _get_paths_from_env()
-        config = RagConfig(index_path=index_path, docs_path=docs_path)
+        config = _build_config_from_env()
         rag_index = RagIndex(config)
         rag_index.load()
         _rag_index = rag_index

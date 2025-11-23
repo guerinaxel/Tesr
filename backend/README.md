@@ -11,7 +11,7 @@ votre code est indexé, vectorisé, puis utilisé comme contexte pertinent pour 
 
 - Extraction automatique du code du projet (backend + frontend).
 - Découpage intelligent en chunks pour du contexte précis.
-- Vectorisation via `sentence-transformers` (all-MiniLM-L6-v2).
+- Vectorisation via `nomic-ai/nomic-embed-text-v1.5` (Sentence Transformers).
 - Index FAISS rapide et persistant (`rag_index.faiss`).
 - API REST `/api/code-qa/` pour poser des questions sur le code.
 - Intégration Ollama + LLaMA 3.1 locale.
@@ -47,6 +47,7 @@ backend/
 - Django 5
 - Django REST Framework
 - sentence-transformers
+- Nomic client (pour les embeddings `nomic-embed-*`)
 - FAISS CPU
 - Ollama Python client
 - python-dotenv
@@ -163,7 +164,8 @@ docker compose up --build
 ## 🧩 Personnalisation
 
 - Ajouter ou exclure certaines extensions → `ALLOWED_EXT` dans `rag_index.py`
-- Modifier le modèle d’embedding → `SentenceTransformer(...)`
+- Modifier le modèle d’embedding → variable d’environnement `RAG_EMBED_MODEL` (par défaut `nomic-ai/nomic-embed-text-v1.5`).
+- Le backend reconstruit automatiquement l’index FAISS si la dimension des embeddings change (ex. passage d’un ancien modèle vers Nomic).
 - Augmenter la profondeur RAG → `k=5` → `k=10`
 
 ---

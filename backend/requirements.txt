@@ -4,6 +4,7 @@ psycopg2-binary>=2.9
 python-dotenv>=1.0
 dj-database-url>=2.2
 sentence-transformers>=2.6
+nomic==3.9.0
 faiss-cpu>=1.8
 joblib>=1.4
 PyPDF2>=3.0
