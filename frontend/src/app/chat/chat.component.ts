@@ -97,6 +97,10 @@ export class ChatComponent {
   }
 
   onSpaceSend(event: KeyboardEvent): void {
+    if (!event.ctrlKey && !event.metaKey) {
+      return;
+    }
+
     if (this.isSending) {
       return;
     }
