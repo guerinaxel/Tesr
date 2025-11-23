@@ -82,13 +82,14 @@ describe('AI Code Assistant app', () => {
 
   it('creates a new topic and shows its empty conversation state', () => {
     let listCall = 0;
-    cy.intercept('GET', `${apiUrl}/topics/`, () => {
+    cy.intercept('GET', `${apiUrl}/topics/`, (req) => {
       listCall += 1;
       if (listCall === 1) {
-        return { topics: [] };
+        req.reply({ topics: [] });
+        return;
       }
 
-      return { topics: [{ id: 3, name: 'New thread', message_count: 0 }] };
+      req.reply({ topics: [{ id: 3, name: 'New thread', message_count: 0 }] });
     }).as('listTopics');
     cy.intercept('POST', `${apiUrl}/topics/`, {
       id: 3,
