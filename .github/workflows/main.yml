@@ -96,11 +96,6 @@ jobs:
           mkdir -p test-results
           npm run test:ci
 
-      - name: Run Cypress end-to-end tests
-        env:
-          CI: true
-        run: npm run e2e
-
       - name: Publish test results
         if: always() && hashFiles('frontend/test-results/**/*.xml') != ''
         uses: EnricoMi/publish-unit-test-result-action@v2
@@ -111,6 +106,11 @@ jobs:
           comment_title: Frontend Test Results
           comment_tag: frontend-test-results
           check_run: false
+
+      - name: Run Cypress end-to-end tests
+        env:
+          CI: true
+        run: npm run e2e
 
       - name: Fail if tests failed
         if: steps.frontend_tests.outcome == 'failure'

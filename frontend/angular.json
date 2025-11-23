@@ -13,7 +13,7 @@
             "outputPath": "dist/ai-code-assistant-frontend",
             "index": "src/index.html",
             "main": "src/main.ts",
-            "polyfills": [],
+            "polyfills": ["zone.js"],
             "tsConfig": "tsconfig.app.json",
             "styles": ["src/styles.scss"],
             "scripts": []
