@@ -156,3 +156,28 @@ class RagIndexWithFakes(SimpleTestCase):
         self.assertEqual("second doc", results[0][0])
         self.assertGreater(results[0][1], results[1][1])
         self.assertEqual([("What is inside?", 2)], rag_index._keyword_index.searches)
+
+    def test_falls_back_to_secondary_model_on_load_error(self) -> None:
+        from codeqa import rag_index as rag_index_module
+
+        calls: list[str] = []
+
+        class FlakyModel(FakeModel):
+            def __init__(self, name: str, **kwargs: Any) -> None:  # type: ignore[override]
+                calls.append(name)
+                if len(calls) == 1:
+                    raise OSError("primary missing")
+                super().__init__(name, **kwargs)
+
+        rag_index_module.SentenceTransformer = FlakyModel  # type: ignore[attr-defined]
+
+        rag_index_module.RagIndex(
+            rag_index_module.RagConfig(
+                index_path=Path("idx"),
+                docs_path=Path("docs"),
+                embedding_model_name="primary-model",
+                fallback_embedding_model_name="fallback-model",
+            )
+        )
+
+        self.assertEqual(["primary-model", "fallback-model"], calls)
