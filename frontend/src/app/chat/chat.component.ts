@@ -1,6 +1,9 @@
 import {
+  CdkVirtualScrollViewport,
+  ScrollingModule,
+} from '@angular/cdk/scrolling';
+import {
   Component,
-  ElementRef,
   OnInit,
   ViewChild,
   computed,
@@ -40,6 +43,7 @@ interface ChatMessage {
   selector: 'app-chat',
   standalone: true,
   imports: [
+    ScrollingModule,
     CommonModule,
     FormsModule,
     MatButtonModule,
@@ -61,7 +65,8 @@ export class ChatComponent implements OnInit {
   readonly initialTopicId = input<number | null>(null);
   readonly messageSent = output<ChatMessage>();
 
-  @ViewChild('messagesContainer') messagesContainer?: ElementRef<HTMLDivElement>;
+  @ViewChild('topicsViewport') topicsViewport?: CdkVirtualScrollViewport;
+  @ViewChild('messagesViewport') messagesViewport?: CdkVirtualScrollViewport;
 
   readonly messages = signal<ChatMessage[]>([]);
   readonly question = model('');
@@ -73,7 +78,14 @@ export class ChatComponent implements OnInit {
   readonly topics = signal<TopicSummary[]>([]);
   readonly selectedTopicId = signal<number | null>(null);
   readonly newTopicName = model('');
-  private pendingTopicSelection: number | null = null;
+  private topicsOffset = 0;
+  private readonly topicsPageSize = 20;
+  private hasMoreTopics = true;
+  private topicsLoading = false;
+  private messagesOffset = 0;
+  private readonly messagesPageSize = 30;
+  private hasMoreMessages = true;
+  private messagesLoading = false;
   private nextId = 1;
 
   readonly hasTopics = computed(() => this.topics().length > 0);
@@ -89,7 +101,7 @@ export class ChatComponent implements OnInit {
   );
 
   ngOnInit(): void {
-    this.loadTopics(this.initialTopicId());
+    this.loadTopics(this.initialTopicId(), true);
   }
 
   onSubmit(): void {
@@ -123,7 +135,7 @@ export class ChatComponent implements OnInit {
     };
 
     if (this.selectedTopicId()) {
-      payload.topic_id = String(this.selectedTopicId());
+      payload.topic_id = this.selectedTopicId() ?? undefined;
     }
 
     if (this.isCustomPrompt()) {
@@ -177,10 +189,10 @@ export class ChatComponent implements OnInit {
   }
 
   private scrollToBottom(): void {
-    const el = this.messagesContainer?.nativeElement;
-    if (!el) return;
+    const viewport = this.messagesViewport;
+    if (!viewport) return;
     setTimeout(() => {
-      el.scrollTop = el.scrollHeight;
+      viewport.scrollToIndex(this.messages().length, 'smooth');
     }, 0);
   }
 
@@ -190,39 +202,55 @@ export class ChatComponent implements OnInit {
     }, 200);
   }
 
-  loadTopics(selectTopicId: number | null = null): void {
-    this.chatDataService.getTopics().subscribe({
-      next: (res) => {
-        this.topics.set((res.topics ?? []).sort((a, b) => a.id - b.id));
+  loadTopics(selectTopicId: number | null = null, reset = false): void {
+    if (this.topicsLoading || (!this.hasMoreTopics && !reset)) {
+      return;
+    }
 
-        const desiredTopicId =
-          selectTopicId ?? this.pendingTopicSelection ?? this.selectedTopicId();
-        const topicExists = desiredTopicId
-          ? this.topics().some((entry) => entry.id === desiredTopicId)
-          : false;
+    if (reset) {
+      this.topics.set([]);
+      this.topicsOffset = 0;
+      this.hasMoreTopics = true;
+    }
 
-        if (topicExists && desiredTopicId != null) {
-          this.pendingTopicSelection = null;
-          this.selectTopic(desiredTopicId);
-          return;
-        }
+    this.topicsLoading = true;
+    this.chatDataService
+      .getTopics({ offset: this.topicsOffset, limit: this.topicsPageSize })
+      .subscribe({
+        next: (res) => {
+          const existingIds = new Set(this.topics().map((entry) => entry.id));
+          const newTopics = (res.topics ?? []).filter(
+            (entry) => !existingIds.has(entry.id)
+          );
 
-        if (this.topics().length) {
-          this.pendingTopicSelection = null;
-          const entries = this.topics();
-          this.selectTopic(entries[entries.length - 1].id);
-          return;
-        }
+          this.topics.update((entries) => [...entries, ...newTopics]);
+          this.hasMoreTopics = Boolean(res.next_offset);
+          this.topicsOffset = res.next_offset ?? this.topicsOffset + newTopics.length;
 
-        this.selectedTopicId.set(null);
-        this.messages.set([]);
-      },
-      error: () => {
-        this.topics.set([]);
-        this.selectedTopicId.set(null);
-        this.messages.set([]);
-      },
-    });
+          if (!this.topics().length) {
+            this.selectedTopicId.set(null);
+            this.resetMessages();
+            return;
+          }
+
+          const desiredTopicId = selectTopicId ?? this.selectedTopicId();
+          const forceReload = selectTopicId != null;
+          const chosenTopicId = desiredTopicId ?? this.topics()[0]?.id ?? null;
+
+          if (chosenTopicId != null) {
+            this.selectTopic(chosenTopicId, forceReload);
+          }
+        },
+        error: () => {
+          this.topics.set([]);
+          this.selectedTopicId.set(null);
+          this.messages.set([]);
+          this.topicsLoading = false;
+        },
+        complete: () => {
+          this.topicsLoading = false;
+        },
+      });
   }
 
   selectTopic(topicId: number, force = false): void {
@@ -231,22 +259,8 @@ export class ChatComponent implements OnInit {
     }
 
     this.selectedTopicId.set(topicId);
-    this.chatDataService.getTopicDetail(topicId).subscribe({
-      next: (res) => {
-        this.nextId = 1;
-        this.messages.set(
-          res.messages.map((msg) => ({
-            id: this.nextId++,
-            from: msg.role,
-            content: msg.content,
-          }))
-        );
-        this.scrollToBottom();
-      },
-      error: () => {
-        this.messages.set([]);
-      },
-    });
+    this.resetMessages();
+    this.loadMessages(topicId, true);
   }
 
   createTopic(): void {
@@ -258,9 +272,8 @@ export class ChatComponent implements OnInit {
     this.chatDataService.createTopic(name).subscribe({
       next: (topic) => {
         this.newTopicName.set('');
-        this.pendingTopicSelection = topic.id;
         this.selectTopic(topic.id, true);
-        this.loadTopics(topic.id);
+        this.loadTopics(topic.id, true);
       },
     });
   }
@@ -268,7 +281,7 @@ export class ChatComponent implements OnInit {
   private refreshTopicMetadata(topicId: number | null): void {
     if (!topicId) return;
 
-    this.chatDataService.getTopicDetail(topicId).subscribe({
+    this.chatDataService.getTopicDetail(topicId, { limit: 0 }).subscribe({
       next: (topic) => {
         this.topics.update((entries) =>
           entries.map((entry) =>
@@ -283,5 +296,75 @@ export class ChatComponent implements OnInit {
         );
       },
     });
+  }
+
+  onTopicsScrolled(index: number): void {
+    if (index >= this.topics().length - 5) {
+      this.loadTopics();
+    }
+  }
+
+  onMessagesScrolled(index: number): void {
+    if (index >= this.messages().length - 5) {
+      const topicId = this.selectedTopicId();
+      if (topicId != null) {
+        this.loadMessages(topicId);
+      }
+    }
+  }
+
+  topicTrackBy = (_: number, topic: TopicSummary) => topic.id;
+  messageTrackBy = (_: number, message: ChatMessage) => message.id;
+
+  private resetMessages(): void {
+    this.messages.set([]);
+    this.nextId = 1;
+    this.messagesOffset = 0;
+    this.hasMoreMessages = true;
+  }
+
+  private loadMessages(topicId: number, reset = false): void {
+    if (this.messagesLoading || (!this.hasMoreMessages && !reset)) {
+      return;
+    }
+
+    if (reset) {
+      this.resetMessages();
+    }
+
+    this.messagesLoading = true;
+    this.chatDataService
+      .getTopicDetail(topicId, {
+        offset: this.messagesOffset,
+        limit: this.messagesPageSize,
+      })
+      .subscribe({
+        next: (res) => {
+          const incomingMessages: ChatMessage[] = (res.messages ?? []).map(
+            (msg) => ({
+              id: this.nextId++,
+              from: msg.role,
+              content: msg.content,
+            })
+          );
+
+          this.messages.update((current) =>
+            reset ? incomingMessages : [...current, ...incomingMessages]
+          );
+          this.hasMoreMessages = Boolean(res.next_offset);
+          this.messagesOffset =
+            res.next_offset ?? this.messagesOffset + incomingMessages.length;
+          this.scrollToBottom();
+        },
+        error: () => {
+          if (reset) {
+            this.messages.set([]);
+          }
+          this.messagesLoading = false;
+        },
+        complete: () => {
+          this.messagesLoading = false;
+        },
+      });
   }
 }

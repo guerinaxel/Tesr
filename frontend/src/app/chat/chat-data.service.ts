@@ -1,5 +1,5 @@
 import { inject, Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 
 import { environment } from '../../environments/environment';
 
@@ -11,18 +11,29 @@ export interface TopicSummary {
 
 export interface TopicDetail extends TopicSummary {
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  next_offset: number | null;
 }
 
-export interface CodeQaPayload extends Record<string, string> {
+export interface PaginatedTopicList {
+  topics: TopicSummary[];
+  next_offset: number | null;
+}
+
+export interface CodeQaPayload extends Record<string, string | number | undefined> {
   question: string;
   system_prompt: string;
-  topic_id?: string;
+  topic_id?: number;
   custom_prompt?: string;
 }
 
 export interface CodeQaResponse {
   answer: string;
   meta?: unknown;
+}
+
+export interface PaginationOptions {
+  offset?: number;
+  limit?: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -34,15 +45,30 @@ export class ChatDataService {
     return this.http.post<CodeQaResponse>(`${this.apiUrl}/code-qa/`, payload);
   }
 
-  getTopics() {
-    return this.http.get<{ topics: TopicSummary[] }>(`${this.apiUrl}/topics/`);
+  getTopics(options: PaginationOptions = {}) {
+    const params = new HttpParams({ fromObject: this.buildPaginationParams(options) });
+
+    return this.http.get<PaginatedTopicList>(`${this.apiUrl}/topics/`, { params });
   }
 
-  getTopicDetail(topicId: number) {
-    return this.http.get<TopicDetail>(`${this.apiUrl}/topics/${topicId}/`);
+  getTopicDetail(topicId: number, options: PaginationOptions = {}) {
+    const params = new HttpParams({ fromObject: this.buildPaginationParams(options) });
+
+    return this.http.get<TopicDetail>(`${this.apiUrl}/topics/${topicId}/`, { params });
   }
 
   createTopic(name: string) {
     return this.http.post<TopicDetail>(`${this.apiUrl}/topics/`, { name });
+  }
+
+  private buildPaginationParams(options: PaginationOptions): Record<string, string> {
+    const params: Record<string, string> = {};
+    if (options.offset != null) {
+      params['offset'] = String(options.offset);
+    }
+    if (options.limit != null) {
+      params['limit'] = String(options.limit);
+    }
+    return params;
   }
 }

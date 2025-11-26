@@ -27,6 +27,10 @@ describe('ChatComponent', () => {
 
     component.topics.set([{ id: 1, name: 'Default', message_count: 0 }]);
     component.selectedTopicId.set(1);
+    chatDataService.getTopicDetail.and.returnValue(
+      of({ id: 1, name: 'Default', message_count: 0, messages: [], next_offset: null })
+    );
+    chatDataService.getTopics.and.returnValue(of({ topics: [], next_offset: null }));
   });
 
   it('sends a question to the backend and appends the assistant answer', fakeAsync(() => {
@@ -34,7 +38,7 @@ describe('ChatComponent', () => {
 
     chatDataService.sendQuestion.and.returnValue(of({ answer: 'Contextual explanation' }));
     chatDataService.getTopicDetail.and.returnValue(
-      of({ id: 1, name: 'Default', message_count: 2, messages: [] })
+      of({ id: 1, name: 'Default', message_count: 2, messages: [], next_offset: null })
     );
 
     component.onSubmit();
@@ -42,9 +46,9 @@ describe('ChatComponent', () => {
     expect(chatDataService.sendQuestion).toHaveBeenCalledWith({
       question: 'Explain RAG',
       system_prompt: 'code expert',
-      topic_id: '1',
+      topic_id: 1,
     });
-    expect(chatDataService.getTopicDetail).toHaveBeenCalledWith(1);
+    expect(chatDataService.getTopicDetail).toHaveBeenCalledWith(1, { limit: 0 });
 
     expect(component.messages()[0]).toEqual(
       jasmine.objectContaining({ from: 'user', content: 'Explain RAG' })
@@ -72,7 +76,7 @@ describe('ChatComponent', () => {
 
     chatDataService.sendQuestion.and.returnValue(of({ answer: 'Acknowledged' }));
     chatDataService.getTopicDetail.and.returnValue(
-      of({ id: 1, name: 'Default', message_count: 2, messages: [] })
+      of({ id: 1, name: 'Default', message_count: 2, messages: [], next_offset: null })
     );
 
     component.onSubmit();
@@ -81,7 +85,7 @@ describe('ChatComponent', () => {
       question: 'Customise the system',
       system_prompt: 'custom',
       custom_prompt: 'You are concise',
-      topic_id: '1',
+      topic_id: 1,
     });
   });
 
@@ -90,12 +94,18 @@ describe('ChatComponent', () => {
 
     chatDataService.sendQuestion.and.returnValue(of({ answer: 'Delivered' }));
     chatDataService.getTopicDetail.and.returnValue(
-      of({ id: 1, name: 'Default', message_count: 2, messages: [] })
+      of({ id: 1, name: 'Default', message_count: 2, messages: [], next_offset: null })
     );
 
     component.onSpaceSend(
       new KeyboardEvent('keydown', { key: ' ', ctrlKey: true })
     );
+
+    expect(chatDataService.sendQuestion).toHaveBeenCalledWith({
+      question: 'Quick send',
+      system_prompt: 'code expert',
+      topic_id: 1,
+    });
 
     expect(component.messages()[0]).toEqual(
       jasmine.objectContaining({ from: 'user', content: 'Quick send' })
@@ -167,10 +177,10 @@ describe('ChatComponent', () => {
     component.newTopicName.set('Feature A');
 
     chatDataService.createTopic.and.returnValue(
-      of({ id: 2, name: 'Feature A', message_count: 0, messages: [] })
+      of({ id: 2, name: 'Feature A', message_count: 0, messages: [], next_offset: null })
     );
     chatDataService.getTopicDetail.and.returnValue(
-      of({ id: 2, name: 'Feature A', message_count: 0, messages: [] })
+      of({ id: 2, name: 'Feature A', message_count: 0, messages: [], next_offset: null })
     );
     chatDataService.getTopics.and.returnValue(
       of({
@@ -178,6 +188,7 @@ describe('ChatComponent', () => {
           { id: 1, name: 'Default', message_count: 0 },
           { id: 2, name: 'Feature A', message_count: 0 },
         ],
+        next_offset: null,
       })
     );
 
@@ -200,7 +211,7 @@ describe('ChatComponent', () => {
 
   it('refreshes topic metadata and ignores null topic ids', () => {
     const getTopicDetailSpy = chatDataService.getTopicDetail.and.returnValue(
-      of({ id: 1, name: 'Updated', message_count: 5, messages: [] })
+      of({ id: 1, name: 'Updated', message_count: 5, messages: [], next_offset: null })
     );
 
     component.topics.set([{ id: 1, name: 'Default', message_count: 1 }]);
@@ -209,7 +220,7 @@ describe('ChatComponent', () => {
 
     component['refreshTopicMetadata'](1);
 
-    expect(getTopicDetailSpy).toHaveBeenCalledWith(1);
+    expect(getTopicDetailSpy).toHaveBeenCalledWith(1, { limit: 0 });
     expect(component.topics()[0]).toEqual(
       jasmine.objectContaining({ name: 'Updated', message_count: 5 })
     );
@@ -217,13 +228,15 @@ describe('ChatComponent', () => {
 
   it('loads topics from the API and selects the most recent when none is chosen', () => {
     component.selectedTopicId.set(null);
+    component.topics.set([]);
 
     chatDataService.getTopics.and.returnValue(
       of({
         topics: [
-          { id: 5, name: 'Earlier', message_count: 2 },
           { id: 6, name: 'Latest', message_count: 4 },
+          { id: 5, name: 'Earlier', message_count: 2 },
         ],
+        next_offset: null,
       })
     );
     chatDataService.getTopicDetail.and.returnValue(
@@ -235,31 +248,48 @@ describe('ChatComponent', () => {
           { role: 'user', content: 'Hi' },
           { role: 'assistant', content: 'Hello' },
         ],
+        next_offset: null,
       })
     );
 
-    component.loadTopics();
+    component.loadTopics(null, true);
 
     expect(component.selectedTopicId()).toBe(6);
     expect(component.messages().length).toBe(2);
     expect(component.messages()[0]).toEqual(
       jasmine.objectContaining({ from: 'user', content: 'Hi' })
     );
-    expect(component.topics().map((t) => t.id)).toEqual([5, 6]);
+    expect(component.topics().map((t) => t.id)).toEqual([6, 5]);
+    expect(chatDataService.getTopicDetail).toHaveBeenCalledWith(6, {
+      offset: 0,
+      limit: 30,
+    });
   });
 
   it('selects a requested topic when provided', () => {
     chatDataService.getTopics.and.returnValue(
-      of({ topics: [{ id: 3, name: 'Requested', message_count: 1 }] })
+      of({
+        topics: [{ id: 3, name: 'Requested', message_count: 1 }],
+        next_offset: null,
+      })
     );
     chatDataService.getTopicDetail.and.returnValue(
-      of({ id: 3, name: 'Requested', message_count: 1, messages: [] })
+      of({
+        id: 3,
+        name: 'Requested',
+        message_count: 1,
+        messages: [],
+        next_offset: null,
+      })
     );
 
     component.loadTopics(3);
 
     expect(component.selectedTopicId()).toBe(3);
-    expect(chatDataService.getTopicDetail).toHaveBeenCalledWith(3);
+    expect(chatDataService.getTopicDetail).toHaveBeenCalledWith(3, {
+      offset: 0,
+      limit: 30,
+    });
   });
 
   it('allows switching to another topic and loads its history', () => {
@@ -278,6 +308,7 @@ describe('ChatComponent', () => {
           { role: 'user', content: 'Question' },
           { role: 'assistant', content: 'Answer' },
         ],
+        next_offset: null,
       })
     );
 
@@ -301,12 +332,15 @@ describe('ChatComponent', () => {
     expect(chatDataService.getTopicDetail).not.toHaveBeenCalled();
 
     chatDataService.getTopicDetail.and.returnValue(
-      of({ id: 2, name: 'Follow-up', message_count: 2, messages: [] })
+      of({ id: 2, name: 'Follow-up', message_count: 2, messages: [], next_offset: null })
     );
 
     component.selectTopic(2, true);
 
-    expect(chatDataService.getTopicDetail).toHaveBeenCalledWith(2);
+    expect(chatDataService.getTopicDetail).toHaveBeenCalledWith(2, {
+      offset: 0,
+      limit: 30,
+    });
   });
 
   it('clears messages when topic detail fails to load', () => {
@@ -329,7 +363,7 @@ describe('ChatComponent', () => {
     component.question.set('Meta send');
     chatDataService.sendQuestion.and.returnValue(of({ answer: 'done' }));
     chatDataService.getTopicDetail.and.returnValue(
-      of({ id: 1, name: 'Default', message_count: 0, messages: [] })
+      of({ id: 1, name: 'Default', message_count: 0, messages: [], next_offset: null })
     );
 
     component.onSpaceSend(
@@ -346,6 +380,62 @@ describe('ChatComponent', () => {
     );
 
     expect(chatDataService.sendQuestion).toHaveBeenCalledTimes(1);
+  });
+
+  it('loads more topics when the viewport nears the end', () => {
+    chatDataService.getTopics.and.returnValue(
+      of({ topics: [{ id: 1, name: 'Default', message_count: 0 }], next_offset: 20 })
+    );
+    component.loadTopics();
+    chatDataService.getTopics.calls.reset();
+
+    chatDataService.getTopics.and.returnValue(
+      of({ topics: [{ id: 2, name: 'Next', message_count: 1 }], next_offset: null })
+    );
+
+    component.onTopicsScrolled(component.topics().length - 1);
+
+    expect(chatDataService.getTopics).toHaveBeenCalledWith({
+      offset: 20,
+      limit: 20,
+    });
+    expect(component.topics().length).toBe(2);
+  });
+
+  it('loads additional messages when scrolling the conversation', () => {
+    chatDataService.getTopicDetail.and.returnValue(
+      of({
+        id: 1,
+        name: 'Default',
+        message_count: 3,
+        messages: [
+          { role: 'user', content: 'One' },
+          { role: 'assistant', content: 'Two' },
+        ],
+        next_offset: 2,
+      })
+    );
+
+    component.selectTopic(1, true);
+    chatDataService.getTopicDetail.calls.reset();
+
+    chatDataService.getTopicDetail.and.returnValue(
+      of({
+        id: 1,
+        name: 'Default',
+        message_count: 3,
+        messages: [{ role: 'user', content: 'Three' }],
+        next_offset: null,
+      })
+    );
+
+    component.onMessagesScrolled(component.messages().length - 1);
+
+    expect(chatDataService.getTopicDetail).toHaveBeenCalledWith(1, {
+      offset: 2,
+      limit: 30,
+    });
+    expect(component.messages().length).toBe(3);
   });
 
   it('handles topic load failures gracefully', () => {

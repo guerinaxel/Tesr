@@ -5,6 +5,7 @@ type Topic = {
   name: string;
   message_count: number;
   messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  next_offset?: number | null;
 };
 
 type ChatRequestBody = {
@@ -14,16 +15,24 @@ type ChatRequestBody = {
   topic_id: string;
 };
 
-export const stubTopicList = (topics: Topic[], alias = 'listTopics') => {
-  cy.intercept('GET', `${apiUrl}/topics/`, { topics }).as(alias);
+export const stubTopicList = (
+  topics: Topic[],
+  alias = 'listTopics',
+  next_offset: number | null = null
+) => {
+  cy.intercept('GET', `${apiUrl}/topics/**`, (req) => {
+    req.reply({ topics, next_offset });
+  }).as(alias);
 };
 
 export const stubTopicDetail = (topic: Topic, alias = 'topicDetail') => {
-  cy.intercept('GET', `${apiUrl}/topics/${topic.id}/`, topic).as(alias);
+  cy.intercept('GET', `${apiUrl}/topics/${topic.id}/**`, (req) => {
+    req.reply({ ...topic, next_offset: topic.next_offset ?? null });
+  }).as(alias);
 };
 
 export const stubCreateTopic = (topic: Topic, alias = 'createTopic') => {
-  cy.intercept('POST', `${apiUrl}/topics/`, topic).as(alias);
+  cy.intercept('POST', `${apiUrl}/topics/`, { ...topic, next_offset: topic.next_offset ?? null }).as(alias);
 };
 
 export const stubSendQuestion = (
