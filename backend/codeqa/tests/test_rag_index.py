@@ -256,17 +256,10 @@ class RagIndexWithFakes(SimpleTestCase):
 
     def test_nomic_embedding_requires_sentencepiece(self) -> None:
         from codeqa import rag_index as rag_index_module
-        import builtins
-
-        real_import = builtins.__import__
-
-        def raising_import(name: str, *args: Any, **kwargs: Any):  # type: ignore[override]
-            if name == "sentencepiece":
-                raise ImportError("No module named sentencepiece")
-            return real_import(name, *args, **kwargs)
-
         with self.assertRaisesRegex(ImportError, "sentencepiece"):
-            with unittest.mock.patch("builtins.__import__", side_effect=raising_import):
+            with unittest.mock.patch(
+                "importlib.import_module", side_effect=ImportError("No module named sentencepiece")
+            ):
                 rag_index_module.RagIndex(
                     rag_index_module.RagConfig(
                         index_path=Path("idx"),
