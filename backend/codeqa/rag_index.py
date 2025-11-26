@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -18,6 +20,7 @@ class RagConfig:
     tokenized_docs_path: Path | None = None
     keyword_index_path: Path | None = None
     embedding_model_name: str = "nomic-ai/nomic-embed-text-v1.5"
+    fallback_embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_model_kwargs: Dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
@@ -35,10 +38,11 @@ class RagIndex:
     def __init__(self, config: RagConfig) -> None:
         self._config = config
         model_kwargs: Dict[str, Any] = config.embedding_model_kwargs or {}
-        if "nomic" in config.embedding_model_name and "trust_remote_code" not in model_kwargs:
-            model_kwargs["trust_remote_code"] = True
-
-        self._model = SentenceTransformer(config.embedding_model_name, **model_kwargs)
+        if "nomic" in config.embedding_model_name:
+            self._ensure_nomic_dependencies()
+            if "trust_remote_code" not in model_kwargs:
+                model_kwargs["trust_remote_code"] = True
+        self._model = self._load_model_with_fallback(model_kwargs)
 
         # Not all SentenceTransformer-compatible models expose a helper to report their
         # embedding dimension (e.g., the test FakeModel). Fall back to None and rely on
@@ -49,6 +53,31 @@ class RagIndex:
         self._docs: List[str] = []
         self._tokenized_docs: List[List[str]] = []
         self._keyword_index: KeywordIndex | None = None
+
+    def _ensure_nomic_dependencies(self) -> None:
+        try:
+            importlib.import_module("sentencepiece")
+        except Exception as exc:
+            raise ImportError(
+                "The Nomic embedding model requires the 'sentencepiece' package. "
+                "Install it with `pip install sentencepiece` or set RAG_EMBED_MODEL "
+                "to a different embedding model."
+            ) from exc
+
+    def _load_model_with_fallback(self, model_kwargs: Dict[str, Any]):
+        logger = logging.getLogger(__name__)
+        primary = self._config.embedding_model_name
+        fallback = self._config.fallback_embedding_model_name
+
+        try:
+            return SentenceTransformer(primary, **model_kwargs)
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            logger.warning("Failed to load embedding model '%s': %s", primary, exc)
+            if fallback == primary:
+                raise
+
+            logger.info("Falling back to embedding model '%s'", fallback)
+            return SentenceTransformer(fallback, **model_kwargs)
 
     def _ensure_data_dirs(self) -> None:
         self._config.index_path.parent.mkdir(parents=True, exist_ok=True)

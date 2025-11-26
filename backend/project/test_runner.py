@@ -17,7 +17,6 @@ class CoverageXMLTestRunner(XMLTestRunner):
     def run_tests(
         self,
         test_labels: Iterable[str] | None = None,
-        extra_tests=None,
         **kwargs,
     ) -> int:
         output_dir = Path(settings.TEST_OUTPUT_DIR)
@@ -25,13 +24,21 @@ class CoverageXMLTestRunner(XMLTestRunner):
 
         cov = coverage.Coverage(
             source=[str(Path(settings.BASE_DIR / "codeqa")), str(Path(settings.BASE_DIR / "project"))],
-            omit=["*/migrations/*", "*/tests/*"],
+            omit=[
+                "*/migrations/*",
+                "*/tests/*",
+                "*/settings/*",
+                "*/wsgi.py",
+                "*/asgi.py",
+                "*/apps.py",
+                "*/test_runner.py",
+            ],
             data_file=str(output_dir / ".coverage"),
         )
         cov.start()
 
         try:
-            failures = super().run_tests(test_labels, extra_tests, **kwargs)
+            failures = super().run_tests(test_labels, **kwargs)
         finally:
             cov.stop()
             cov.save()

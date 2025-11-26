@@ -30,10 +30,14 @@ def _build_config_from_env() -> RagConfig:
     embedding_model_name = os.getenv(
         "RAG_EMBED_MODEL", RagConfig.embedding_model_name
     )
+    fallback_embedding_model_name = os.getenv(
+        "RAG_EMBED_MODEL_FALLBACK", RagConfig.fallback_embedding_model_name
+    )
     return RagConfig(
         index_path=index_path,
         docs_path=docs_path,
         embedding_model_name=embedding_model_name,
+        fallback_embedding_model_name=fallback_embedding_model_name,
     )
 
 

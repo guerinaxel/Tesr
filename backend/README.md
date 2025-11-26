@@ -47,6 +47,7 @@ backend/
 - Django 5
 - Django REST Framework
 - sentence-transformers
+- sentencepiece (requis par `nomic-ai/nomic-embed-text-v1.5`)
 - Nomic client (pour les embeddings `nomic-embed-*`)
 - FAISS CPU
 - Ollama Python client
@@ -165,6 +166,7 @@ docker compose up --build
 
 - Ajouter ou exclure certaines extensions → `ALLOWED_EXT` dans `rag_index.py`
 - Modifier le modèle d’embedding → variable d’environnement `RAG_EMBED_MODEL` (par défaut `nomic-ai/nomic-embed-text-v1.5`).
+- Définir un modèle de secours en cas d’échec de téléchargement → `RAG_EMBED_MODEL_FALLBACK` (par défaut `sentence-transformers/all-MiniLM-L6-v2`).
 - Le backend reconstruit automatiquement l’index FAISS si la dimension des embeddings change (ex. passage d’un ancien modèle vers Nomic).
 - Augmenter la profondeur RAG → `k=5` → `k=10`
 
