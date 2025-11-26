@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import sys
 import types
+import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Dict
@@ -86,6 +87,9 @@ class RagIndexWithFakes(SimpleTestCase):
 
         importlib.reload(rag_index_module)
         self.rag_index_module = rag_index_module
+        # Avoid pulling the real Nomic model during tests; use a local placeholder instead.
+        rag_index_module.RagConfig.embedding_model_name = "local-test-model"
+        rag_index_module.RagConfig.fallback_embedding_model_name = "local-test-model-fallback"
 
     def test_build_from_texts_persists_embeddings_and_docs(self) -> None:
         from codeqa.rag_index import RagConfig, RagIndex
@@ -94,6 +98,8 @@ class RagIndexWithFakes(SimpleTestCase):
             config = RagConfig(
                 index_path=Path(tmp) / "idx.faiss",
                 docs_path=Path(tmp) / "docs.pkl",
+                embedding_model_name="local-model",
+                fallback_embedding_model_name="local-fallback",
             )
             rag_index = RagIndex(config)
             rag_index.build_from_texts(["alpha", "beta"])
@@ -129,7 +135,12 @@ class RagIndexWithFakes(SimpleTestCase):
                 "avgdl": 1.0,
             }
 
-            config = RagConfig(index_path=index_path, docs_path=docs_path)
+            config = RagConfig(
+                index_path=index_path,
+                docs_path=docs_path,
+                embedding_model_name="local-model",
+                fallback_embedding_model_name="local-fallback",
+            )
             rag_index = RagIndex(config)
 
             rag_index.load()
@@ -143,7 +154,12 @@ class RagIndexWithFakes(SimpleTestCase):
         from codeqa.rag_index import RagConfig, RagIndex
 
         rag_index = RagIndex(
-            RagConfig(index_path=Path("idx"), docs_path=Path("docs"))
+            RagConfig(
+                index_path=Path("idx"),
+                docs_path=Path("docs"),
+                embedding_model_name="local-model",
+                fallback_embedding_model_name="local-fallback",
+            )
         )
         rag_index._index = FakeIndexFlatIP(3)
         rag_index._docs = ["first doc", "second doc"]
@@ -181,3 +197,73 @@ class RagIndexWithFakes(SimpleTestCase):
         )
 
         self.assertEqual(["primary-model", "fallback-model"], calls)
+
+    def test_nomic_model_sets_trust_remote_code_by_default(self) -> None:
+        from codeqa import rag_index as rag_index_module
+
+        init_calls: dict[str, Any] = {}
+
+        class CapturingModel(FakeModel):
+            def __init__(self, name: str, **kwargs: Any) -> None:  # type: ignore[override]
+                init_calls["name"] = name
+                init_calls["kwargs"] = kwargs
+                super().__init__(name, **kwargs)
+
+        rag_index_module.SentenceTransformer = CapturingModel  # type: ignore[attr-defined]
+        rag_index_module.RagIndex._ensure_nomic_dependencies = (  # type: ignore[attr-defined]
+            lambda self: None
+        )
+
+        rag_index_module.RagIndex(
+            rag_index_module.RagConfig(
+                index_path=Path("idx"),
+                docs_path=Path("docs"),
+                embedding_model_name="nomic-ai/nomic-embed-text-v1.5",
+            )
+        )
+
+        self.assertEqual("nomic-ai/nomic-embed-text-v1.5", init_calls["name"])
+        self.assertTrue(init_calls["kwargs"].get("trust_remote_code"))
+
+    def test_nomic_model_respects_provided_trust_remote_code_flag(self) -> None:
+        from codeqa import rag_index as rag_index_module
+
+        init_calls: dict[str, Any] = {}
+
+        class CapturingModel(FakeModel):
+            def __init__(self, name: str, **kwargs: Any) -> None:  # type: ignore[override]
+                init_calls["name"] = name
+                init_calls["kwargs"] = kwargs
+                super().__init__(name, **kwargs)
+
+        rag_index_module.SentenceTransformer = CapturingModel  # type: ignore[attr-defined]
+        rag_index_module.RagIndex._ensure_nomic_dependencies = (  # type: ignore[attr-defined]
+            lambda self: None
+        )
+
+        rag_index_module.RagIndex(
+            rag_index_module.RagConfig(
+                index_path=Path("idx"),
+                docs_path=Path("docs"),
+                embedding_model_name="nomic-ai/nomic-embed-text-v1.5",
+                embedding_model_kwargs={"trust_remote_code": False, "device": "cpu"},
+            )
+        )
+
+        self.assertEqual(
+            {"trust_remote_code": False, "device": "cpu"}, init_calls["kwargs"]
+        )
+
+    def test_nomic_embedding_requires_sentencepiece(self) -> None:
+        from codeqa import rag_index as rag_index_module
+        with self.assertRaisesRegex(ImportError, "sentencepiece"):
+            with unittest.mock.patch(
+                "importlib.import_module", side_effect=ImportError("No module named sentencepiece")
+            ):
+                rag_index_module.RagIndex(
+                    rag_index_module.RagConfig(
+                        index_path=Path("idx"),
+                        docs_path=Path("docs"),
+                        embedding_model_name="nomic-ai/nomic-embed-text-v1.5",
+                    )
+                )

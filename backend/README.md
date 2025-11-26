@@ -47,6 +47,7 @@ backend/
 - Django 5
 - Django REST Framework
 - sentence-transformers
+- sentencepiece (requis par `nomic-ai/nomic-embed-text-v1.5`)
 - Nomic client (pour les embeddings `nomic-embed-*`)
 - FAISS CPU
 - Ollama Python client
