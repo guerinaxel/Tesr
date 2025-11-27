@@ -31,6 +31,11 @@ describe('ChatComponent', () => {
       of({ id: 1, name: 'Default', message_count: 0, messages: [], next_offset: null })
     );
     chatDataService.getTopics.and.returnValue(of({ topics: [], next_offset: null }));
+    fixture.detectChanges();
+    chatDataService.getTopics.calls.reset();
+
+    component.topics.set([{ id: 1, name: 'Default', message_count: 0 }]);
+    component.selectedTopicId.set(1);
   });
 
   it('sends a question to the backend and appends the assistant answer', fakeAsync(() => {

@@ -4,6 +4,7 @@ import {
 } from '@angular/cdk/scrolling';
 import {
   Component,
+  DestroyRef,
   OnInit,
   ViewChild,
   computed,
@@ -63,6 +64,7 @@ interface ChatMessage {
 })
 export class ChatComponent implements OnInit {
   private readonly chatDataService = inject(ChatDataService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly initialTopicId = input<number | null>(null);
   readonly messageSent = output<ChatMessage>();
@@ -116,7 +118,11 @@ export class ChatComponent implements OnInit {
     }
 
     this.topicSearch$
-      .pipe(debounceTime(500), distinctUntilChanged(), takeUntilDestroyed())
+      .pipe(
+        debounceTime(500),
+        distinctUntilChanged(),
+        takeUntilDestroyed(this.destroyRef)
+      )
       .subscribe((term) => {
         const query = term.trim();
         if (!query) {

@@ -82,20 +82,18 @@ export class ChatDataService {
   }
 
   searchEverything(query: string, options: Record<string, number> = {}) {
-    const params = new HttpParams({
-      fromObject: {
-        q: query,
-        limit: options.limit != null ? String(options.limit) : undefined,
-        topics_offset:
-          options.topics_offset != null ? String(options.topics_offset) : undefined,
-        questions_offset:
-          options.questions_offset != null
-            ? String(options.questions_offset)
-            : undefined,
-        answers_offset:
-          options.answers_offset != null ? String(options.answers_offset) : undefined,
-      },
-    });
+    let params = new HttpParams().set('q', query);
+
+    const maybeAppend = (key: string, value: number | undefined) => {
+      if (value != null) {
+        params = params.set(key, String(value));
+      }
+    };
+
+    maybeAppend('limit', options.limit);
+    maybeAppend('topics_offset', options.topics_offset);
+    maybeAppend('questions_offset', options.questions_offset);
+    maybeAppend('answers_offset', options.answers_offset);
 
     return this.http.get<SearchResponse>(`${this.apiUrl}/search/`, { params });
   }
