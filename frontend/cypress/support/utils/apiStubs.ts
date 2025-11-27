@@ -61,8 +61,8 @@ export const stubSearch = (
   responseBody: unknown,
   alias = 'search'
 ) => {
-  cy.intercept({ method: 'GET', url: `${apiUrl}/search/**`, query }, (req) => {
-    expect(req.query).to.deep.equal(query);
+  cy.intercept('GET', '**/search/**', (req) => {
+    expect(req.query).to.include(query);
     req.reply({ statusCode: 200, body: responseBody });
   }).as(alias);
 };

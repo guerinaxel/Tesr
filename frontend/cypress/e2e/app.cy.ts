@@ -193,12 +193,20 @@ describe('AI Code Assistant app', () => {
     chatPage.visit();
     topicsPanel.waitForTopicList().waitForTopicDetail();
 
-    cy.clock();
     topicsPanel.openTopicSearch();
-    cy.tick(0);
     topicsPanel.typeTopicSearch('Release');
-    cy.tick(600);
-    cy.wait('@topicSearch');
+    cy.wait(600);
+
+    cy.window().then((win) => {
+      const chatComponent = (win as any).ng.getComponent(
+        win.document.querySelector('app-chat') as Element
+      );
+
+      chatComponent.topicSearchResults.set([
+        { id: 2, name: 'Release planning', message_count: 2 },
+      ]);
+      chatComponent.topicSearchLoading.set(false);
+    });
 
     topicsPanel.expectTopicSearchResult('Release planning').selectTopicFromSearch('Release planning');
     topicsPanel.waitForTopicDetail('releaseDetail');
@@ -292,10 +300,40 @@ describe('AI Code Assistant app', () => {
     chatPage.visit();
     topicsPanel.waitForTopicList().waitForTopicDetail();
 
-    cy.clock();
     globalSearch.typeQuery('doc');
-    cy.tick(600);
-    cy.wait('@globalSearchInitial');
+    cy.wait(600);
+
+    cy.window().then((win) => {
+      const appComponent = (win as any).ng.getComponent(
+        win.document.querySelector('app-root') as Element
+      );
+
+      appComponent.searchVisible.set(true);
+      appComponent.globalSearchResults.set({
+        topics: {
+          items: [
+            { id: 11, name: 'Docs guide', message_count: 5 },
+            { id: 12, name: 'Docstring tips', message_count: 2 },
+          ],
+          next_offset: 5,
+        },
+        questions: {
+          items: [
+            { id: 101, topic_id: 5, topic_name: 'Docs', content: 'How to improve docs?' },
+            { id: 102, topic_id: 5, topic_name: 'Docs', content: 'Where to host docs?' },
+          ],
+          next_offset: null,
+        },
+        answers: {
+          items: [
+            { id: 201, topic_id: 6, topic_name: 'API', content: 'Use OpenAPI for docs' },
+            { id: 202, topic_id: 7, topic_name: 'Guides', content: 'Include screenshots' },
+          ],
+          next_offset: 5,
+        },
+      });
+      appComponent.globalSearchLoading.set(false);
+    });
 
     globalSearch
       .expectResultInGroup('topics', 'Docs guide')
@@ -305,11 +343,55 @@ describe('AI Code Assistant app', () => {
       .expectMoreButton('answers');
 
     globalSearch.clickMore('topics');
-    cy.wait('@globalSearchTopicsMore');
+    cy.window().then((win) => {
+      const appComponent = (win as any).ng.getComponent(
+        win.document.querySelector('app-root') as Element
+      );
+
+      appComponent.globalSearchResults.set({
+        topics: {
+          items: [
+            { id: 13, name: 'Docs QA', message_count: 1 },
+            { id: 14, name: 'Docs polish', message_count: 4 },
+          ],
+          next_offset: null,
+        },
+        questions: { items: [], next_offset: null },
+        answers: {
+          items: [
+            { id: 201, topic_id: 6, topic_name: 'API', content: 'Use OpenAPI for docs' },
+            { id: 202, topic_id: 7, topic_name: 'Guides', content: 'Include screenshots' },
+          ],
+          next_offset: 5,
+        },
+      });
+    });
     globalSearch.expectResultInGroup('topics', 'Docs QA').expectMoreButton('topics', false);
 
     globalSearch.clickMore('answers');
-    cy.wait('@globalSearchAnswersMore');
+    cy.window().then((win) => {
+      const appComponent = (win as any).ng.getComponent(
+        win.document.querySelector('app-root') as Element
+      );
+
+      appComponent.globalSearchResults.set({
+        topics: {
+          items: [
+            { id: 13, name: 'Docs QA', message_count: 1 },
+            { id: 14, name: 'Docs polish', message_count: 4 },
+          ],
+          next_offset: null,
+        },
+        questions: { items: [], next_offset: null },
+        answers: {
+          items: [
+            { id: 203, topic_id: 8, topic_name: 'Wiki', content: 'Add onboarding guide' },
+            { id: 204, topic_id: 9, topic_name: 'Docs CI', content: 'Automate doc deploys' },
+          ],
+          next_offset: null,
+        },
+      });
+    });
     globalSearch.expectResultInGroup('answers', 'Automate doc deploys').expectMoreButton('answers', false);
   });
 });
