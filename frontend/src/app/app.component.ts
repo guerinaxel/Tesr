@@ -53,6 +53,10 @@ export class AppComponent implements OnInit {
   private readonly search$ = new Subject<string>();
 
   ngOnInit(): void {
+    if ((window as any).Cypress) {
+      (window as any).appComponent = this;
+    }
+
     this.search$
       .pipe(debounceTime(500), distinctUntilChanged(), takeUntilDestroyed())
       .subscribe((value) => this.runGlobalSearch(value));

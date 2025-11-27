@@ -111,6 +111,10 @@ export class ChatComponent implements OnInit {
   ngOnInit(): void {
     this.loadTopics(this.initialTopicId(), true);
 
+    if ((window as any).Cypress) {
+      (window as any).chatComponent = this;
+    }
+
     this.topicSearch$
       .pipe(debounceTime(500), distinctUntilChanged(), takeUntilDestroyed())
       .subscribe((term) => {

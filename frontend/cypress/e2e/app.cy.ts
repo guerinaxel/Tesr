@@ -198,9 +198,7 @@ describe('AI Code Assistant app', () => {
     cy.wait(600);
 
     cy.window().then((win) => {
-      const chatComponent = (win as any).ng.getComponent(
-        win.document.querySelector('app-chat') as Element
-      );
+      const chatComponent = (win as any).chatComponent;
 
       chatComponent.topicSearchResults.set([
         { id: 2, name: 'Release planning', message_count: 2 },
@@ -304,9 +302,7 @@ describe('AI Code Assistant app', () => {
     cy.wait(600);
 
     cy.window().then((win) => {
-      const appComponent = (win as any).ng.getComponent(
-        win.document.querySelector('app-root') as Element
-      );
+      const appComponent = (win as any).appComponent;
 
       appComponent.searchVisible.set(true);
       appComponent.globalSearchResults.set({
@@ -343,10 +339,10 @@ describe('AI Code Assistant app', () => {
       .expectMoreButton('answers');
 
     globalSearch.clickMore('topics');
+    cy.wait(50);
+
     cy.window().then((win) => {
-      const appComponent = (win as any).ng.getComponent(
-        win.document.querySelector('app-root') as Element
-      );
+      const appComponent = (win as any).appComponent;
 
       appComponent.globalSearchResults.set({
         topics: {
@@ -369,10 +365,10 @@ describe('AI Code Assistant app', () => {
     globalSearch.expectResultInGroup('topics', 'Docs QA').expectMoreButton('topics', false);
 
     globalSearch.clickMore('answers');
+    cy.wait(50);
+
     cy.window().then((win) => {
-      const appComponent = (win as any).ng.getComponent(
-        win.document.querySelector('app-root') as Element
-      );
+      const appComponent = (win as any).appComponent;
 
       appComponent.globalSearchResults.set({
         topics: {
