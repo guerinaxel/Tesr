@@ -23,7 +23,7 @@ describe('ChatDataService', () => {
 
   it('sends a question payload to the code-qa endpoint', () => {
     service
-      .sendQuestion({ question: 'Test', system_prompt: 'code expert', topic_id: '1' })
+      .sendQuestion({ question: 'Test', system_prompt: 'code expert', topic_id: 1 })
       .subscribe();
 
     const req = httpMock.expectOne(`${environment.apiUrl}/code-qa/`);
@@ -31,7 +31,7 @@ describe('ChatDataService', () => {
     expect(req.request.body).toEqual({
       question: 'Test',
       system_prompt: 'code expert',
-      topic_id: '1',
+      topic_id: 1,
     });
     req.flush({ answer: 'ok' });
   });
@@ -41,15 +41,31 @@ describe('ChatDataService', () => {
 
     const req = httpMock.expectOne(`${environment.apiUrl}/topics/`);
     expect(req.request.method).toBe('GET');
-    req.flush({ topics: [] });
+    req.flush({ topics: [], next_offset: null });
+  });
+
+  it('applies pagination params when provided', () => {
+    service.getTopics({ limit: 15 }).subscribe();
+
+    const req = httpMock.expectOne(`${environment.apiUrl}/topics/?limit=15`);
+    expect(req.request.method).toBe('GET');
+    req.flush({ topics: [], next_offset: null });
   });
 
   it('fetches topic details', () => {
-    service.getTopicDetail(3).subscribe();
+    service.getTopicDetail(3, { offset: 20, limit: 10 }).subscribe();
 
-    const req = httpMock.expectOne(`${environment.apiUrl}/topics/3/`);
+    const req = httpMock.expectOne(
+      `${environment.apiUrl}/topics/3/?offset=20&limit=10`
+    );
     expect(req.request.method).toBe('GET');
-    req.flush({ id: 3, name: 'Topic', message_count: 2, messages: [] });
+    req.flush({
+      id: 3,
+      name: 'Topic',
+      message_count: 2,
+      messages: [],
+      next_offset: null,
+    });
   });
 
   it('creates a new topic', () => {
@@ -58,6 +74,12 @@ describe('ChatDataService', () => {
     const req = httpMock.expectOne(`${environment.apiUrl}/topics/`);
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({ name: 'New Feature' });
-    req.flush({ id: 10, name: 'New Feature', message_count: 0, messages: [] });
+    req.flush({
+      id: 10,
+      name: 'New Feature',
+      message_count: 0,
+      messages: [],
+      next_offset: null,
+    });
   });
 });

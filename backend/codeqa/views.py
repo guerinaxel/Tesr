@@ -1,22 +1,40 @@
 from __future__ import annotations
 
-from io import StringIO
 import inspect
+from io import StringIO
 from typing import Any
 
 from django.http import HttpRequest
 from django.core.management import call_command
+from django.db.models import Count
+from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import rag_service
+from .models import Message, Topic
 from .serializers import (
     BuildRagRequestSerializer,
     CodeQuestionSerializer,
     TopicCreateSerializer,
 )
-from .topics import topic_store
+
+
+def _parse_pagination(request: HttpRequest, *, default_limit: int = 20, max_limit: int = 50) -> tuple[int, int]:
+    try:
+        limit = int(request.query_params.get("limit", default_limit))
+    except (TypeError, ValueError):
+        limit = default_limit
+
+    try:
+        offset = int(request.query_params.get("offset", 0))
+    except (TypeError, ValueError):
+        offset = 0
+
+    limit = max(0, min(limit, max_limit))
+    offset = max(0, offset)
+    return limit, offset
 
 
 class CodeQAView(APIView):
@@ -34,11 +52,14 @@ class CodeQAView(APIView):
         typo_prompt: str | None = serializer.validated_data.get("custom_pront")
         topic_id: int | None = serializer.validated_data.get("topic_id")
 
-        if topic_id is not None and topic_store.get_topic(topic_id) is None:
-            return Response(
-                {"detail": "Topic not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        topic: Topic | None = None
+        if topic_id is not None:
+            topic = Topic.objects.filter(id=topic_id).first()
+            if topic is None:
+                return Response(
+                    {"detail": "Topic not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
 
         answer_kwargs: dict[str, Any] = {
             "question": question,
@@ -67,37 +88,90 @@ class CodeQAView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        if topic_id is not None:
-            try:
-                topic_store.add_exchange(topic_id, question=question, answer=answer)
-            except KeyError:
-                return Response(
-                    {"detail": "Topic not found."},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
+        if topic is not None:
+            Message.objects.bulk_create(
+                [
+                    Message(topic=topic, role=Message.ROLE_USER, content=question),
+                    Message(topic=topic, role=Message.ROLE_ASSISTANT, content=answer),
+                ]
+            )
 
         return Response({"answer": answer, "meta": meta}, status=status.HTTP_200_OK)
 
 
 class TopicListView(APIView):
     def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> Response:
-        return Response({"topics": topic_store.list_topics()}, status=status.HTTP_200_OK)
+        limit, offset = _parse_pagination(request)
+        topics = (
+            Topic.objects.annotate(message_count=Count("messages"))
+            .order_by("-created_at", "-id")
+            .all()
+        )
+
+        paginated = list(topics[offset : offset + limit + 1]) if limit else []
+        has_more = len(paginated) > limit if limit else topics.count() > offset
+        topic_payload = paginated[:limit] if limit else []
+        next_offset = offset + limit if has_more and limit else None
+
+        return Response(
+            {
+                "topics": [
+                    {"id": topic.id, "name": topic.name, "message_count": topic.message_count}
+                    for topic in topic_payload
+                ],
+                "next_offset": next_offset,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> Response:
         serializer = TopicCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        topic = topic_store.create_topic(serializer.validated_data["name"])
-        return Response(topic.to_dict(), status=status.HTTP_201_CREATED)
+        topic = Topic.objects.create(name=serializer.validated_data["name"])
+        return Response(
+            {
+                "id": topic.id,
+                "name": topic.name,
+                "message_count": 0,
+                "messages": [],
+                "next_offset": None,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class TopicDetailView(APIView):
     def get(self, request: HttpRequest, topic_id: int, *args: Any, **kwargs: Any) -> Response:
-        topic_data = topic_store.serialize_topic(topic_id)
-        if topic_data is None:
-            return Response({"detail": "Topic not found."}, status=status.HTTP_404_NOT_FOUND)
+        topic = get_object_or_404(Topic.objects.all(), id=topic_id)
+        limit, offset = _parse_pagination(request)
 
-        return Response(topic_data, status=status.HTTP_200_OK)
+        messages_qs = topic.messages.order_by("created_at", "id")
+        message_count = messages_qs.count()
+
+        if limit == 0:
+            messages_payload: list[Message] = []
+            has_more = message_count > offset
+        else:
+            messages_slice = list(messages_qs[offset : offset + limit + 1])
+            has_more = len(messages_slice) > limit
+            messages_payload = messages_slice[:limit]
+
+        next_offset = offset + limit if has_more and limit else None
+
+        return Response(
+            {
+                "id": topic.id,
+                "name": topic.name,
+                "message_count": message_count,
+                "messages": [
+                    {"role": message.role, "content": message.content}
+                    for message in messages_payload
+                ],
+                "next_offset": next_offset,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class HealthView(APIView):

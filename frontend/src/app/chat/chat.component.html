@@ -29,10 +29,19 @@
     </form>
 
     @if (hasTopics()) {
-      <mat-nav-list class="topics-panel__list">
-        @for (topic of topics(); track topic.id) {
+      <cdk-virtual-scroll-viewport
+        class="topics-panel__viewport"
+        [itemSize]="72"
+        [minBufferPx]="200"
+        [maxBufferPx]="400"
+        (scrolledIndexChange)="onTopicsScrolled($event)"
+        #topicsViewport
+        data-cy="topics-viewport"
+      >
+        <mat-nav-list class="topics-panel__list">
           <a
             mat-list-item
+            *cdkVirtualFor="let topic of topics(); trackBy: topicTrackBy"
             (click)="selectTopic(topic.id)"
             [class.selected]="topic.id === selectedTopicId()"
             data-cy="topic-item"
@@ -40,8 +49,8 @@
             <div matLine class="topic__name">{{ topic.name }}</div>
             <div matLine class="topic__meta">{{ topic.message_count }} messages</div>
           </a>
-        }
-      </mat-nav-list>
+        </mat-nav-list>
+      </cdk-virtual-scroll-viewport>
     } @else {
       <div class="topics-panel__empty">Aucun topic. Créez-en un pour démarrer.</div>
     }
@@ -58,7 +67,15 @@
       </mat-card-header>
 
       <mat-card-content>
-        <div class="messages" #messagesContainer data-cy="messages">
+        <cdk-virtual-scroll-viewport
+          class="messages"
+          [itemSize]="120"
+          [minBufferPx]="360"
+          [maxBufferPx]="720"
+          #messagesViewport
+          data-cy="messages"
+          (scrolledIndexChange)="onMessagesScrolled($event)"
+        >
           @if (!hasMessages()) {
             <div class="empty-state" data-cy="empty-state">
               <mat-icon aria-hidden="true">chat_bubble_outline</mat-icon>
@@ -66,7 +83,7 @@
             </div>
           }
 
-          @for (msg of messages(); track msg.id) {
+          <ng-container *cdkVirtualFor="let msg of messages(); trackBy: messageTrackBy">
             <div
               class="message"
               [ngClass]="{
@@ -92,8 +109,8 @@
                 <div class="message__content">{{ msg.content }}</div>
               </div>
             </div>
-          }
-        </div>
+          </ng-container>
+        </cdk-virtual-scroll-viewport>
       </mat-card-content>
 
       <mat-divider></mat-divider>

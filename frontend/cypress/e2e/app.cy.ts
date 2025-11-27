@@ -20,7 +20,7 @@ describe('AI Code Assistant app', () => {
       {
         question: 'Bonjour, aide-moi !',
         system_prompt: 'code expert',
-        topic_id: '1',
+        topic_id: 1,
       },
       { answer: 'Voici une réponse utile.' }
     );
@@ -48,7 +48,7 @@ describe('AI Code Assistant app', () => {
         question: 'Salut, explique-moi ceci.',
         system_prompt: 'custom',
         custom_prompt: 'Parle en français',
-        topic_id: '2',
+        topic_id: 2,
       },
       { answer: 'Réponse sur mesure.' },
       'sendCustom'
@@ -69,14 +69,14 @@ describe('AI Code Assistant app', () => {
 
   it('creates a new topic and shows its empty conversation state', () => {
     let listCall = 0;
-    cy.intercept('GET', 'http://localhost:8000/api/topics/', (req) => {
+    cy.intercept('GET', 'http://localhost:8000/api/topics/**', (req) => {
       listCall += 1;
       if (listCall === 1) {
-        req.reply({ topics: [] });
+        req.reply({ topics: [], next_offset: null });
         return;
       }
 
-      req.reply({ topics: [{ id: 3, name: 'New thread', message_count: 0 }] });
+      req.reply({ topics: [{ id: 3, name: 'New thread', message_count: 0 }], next_offset: null });
     }).as('listTopics');
     stubCreateTopic({ id: 3, name: 'New thread', message_count: 0, messages: [] });
     stubTopicDetail({ id: 3, name: 'New thread', message_count: 0, messages: [] });
@@ -95,8 +95,8 @@ describe('AI Code Assistant app', () => {
 
   it('lists multiple topics and loads their histories when switching', () => {
     stubTopicList([
-      { id: 1, name: 'Sprint 12', message_count: 2 },
       { id: 2, name: 'Bugfix', message_count: 1 },
+      { id: 1, name: 'Sprint 12', message_count: 2 },
     ]);
     stubTopicDetail(
       {

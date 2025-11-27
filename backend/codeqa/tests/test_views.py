@@ -6,7 +6,7 @@ import types
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 from rest_framework import status
 from rest_framework.test import APIRequestFactory
 
@@ -31,7 +31,7 @@ from codeqa import rag_index as rag_index_module  # noqa: E402
 importlib.reload(rag_index_module)
 from codeqa import rag_service as rag_service_module  # noqa: E402
 importlib.reload(rag_service_module)
-from codeqa.topics import topic_store  # noqa: E402
+from codeqa.models import Message, Topic  # noqa: E402
 from codeqa.views import (  # noqa: E402
     BuildRagIndexView,
     CodeQAView,
@@ -41,10 +41,10 @@ from codeqa.views import (  # noqa: E402
 )
 
 
-class CodeQAViewTests(SimpleTestCase):
+class CodeQAViewTests(TestCase):
     def setUp(self) -> None:
         self.factory = APIRequestFactory()
-        topic_store.reset()
+        Topic.objects.all().delete()
 
     def test_post_returns_answer_payload(self) -> None:
         def fake_answer_question(question: str, top_k: int, system_prompt: str, custom_prompt: str | None = None):
@@ -106,7 +106,7 @@ class CodeQAViewTests(SimpleTestCase):
         )
 
     def test_records_exchange_when_topic_provided(self) -> None:
-        topic = topic_store.create_topic("New thread")
+        topic = Topic.objects.create(name="New thread")
 
         def fake_answer_question(
             question: str,
@@ -126,11 +126,11 @@ class CodeQAViewTests(SimpleTestCase):
         response = CodeQAView.as_view()(request)
 
         self.assertEqual(status.HTTP_200_OK, response.status_code)
-        stored = topic_store.serialize_topic(topic.id)
-        assert stored is not None
-        self.assertEqual(2, len(stored["messages"]))
-        self.assertEqual("Hello?", stored["messages"][0]["content"])
-        self.assertEqual("stored answer", stored["messages"][1]["content"])
+        messages = list(topic.messages.order_by("created_at"))
+        self.assertEqual(2, len(messages))
+        self.assertEqual("Hello?", messages[0].content)
+        self.assertEqual(Message.ROLE_USER, messages[0].role)
+        self.assertEqual("stored answer", messages[1].content)
 
     def test_returns_404_when_topic_missing(self) -> None:
         request = self.factory.post(
@@ -224,10 +224,10 @@ class BuildRagIndexViewTests(SimpleTestCase):
         self.assertIn("detail", response.data)
 
 
-class TopicViewsTests(SimpleTestCase):
+class TopicViewsTests(TestCase):
     def setUp(self) -> None:
         self.factory = APIRequestFactory()
-        topic_store.reset()
+        Topic.objects.all().delete()
 
     def test_creates_topic(self) -> None:
         request = self.factory.post("/api/topics/", {"name": "Release notes"}, format="json")
@@ -237,28 +237,39 @@ class TopicViewsTests(SimpleTestCase):
         self.assertEqual(status.HTTP_201_CREATED, response.status_code)
         self.assertEqual("Release notes", response.data["name"])
         self.assertEqual([], response.data["messages"])
+        self.assertEqual(0, response.data["message_count"])
 
     def test_lists_topics(self) -> None:
-        topic_store.create_topic("One")
-        topic_store.create_topic("Two")
+        Topic.objects.bulk_create([Topic(name="One"), Topic(name="Two"), Topic(name="Three")])
 
-        request = self.factory.get("/api/topics/")
+        request = self.factory.get("/api/topics/?limit=2&offset=0")
         response = TopicListView.as_view()(request)
 
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertEqual(2, len(response.data["topics"]))
+        self.assertEqual(2, response.data["next_offset"])
+
+        second_page = TopicListView.as_view()(self.factory.get("/api/topics/?limit=2&offset=2"))
+        self.assertEqual(1, len(second_page.data["topics"]))
+        self.assertIsNone(second_page.data["next_offset"])
+
         self.assertTrue(all("message_count" in topic for topic in response.data["topics"]))
 
     def test_returns_detail_with_messages(self) -> None:
-        topic = topic_store.create_topic("Docs")
-        topic_store.add_exchange(topic.id, "Question?", "Answer")
+        topic = Topic.objects.create(name="Docs")
+        Message.objects.create(topic=topic, role=Message.ROLE_USER, content="Question?")
+        Message.objects.create(topic=topic, role=Message.ROLE_ASSISTANT, content="Answer")
+        Message.objects.create(topic=topic, role=Message.ROLE_ASSISTANT, content="Extra")
 
-        request = self.factory.get(f"/api/topics/{topic.id}/")
+        request = self.factory.get(f"/api/topics/{topic.id}/?limit=2&offset=1")
         response = TopicDetailView.as_view()(request, topic_id=topic.id)
 
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertEqual(2, len(response.data["messages"]))
         self.assertEqual("Docs", response.data["name"])
+        self.assertEqual(3, response.data["message_count"])
+        self.assertIsNone(response.data["next_offset"])
+        self.assertEqual("Answer", response.data["messages"][0]["content"])
 
     def test_returns_404_for_missing_topic(self) -> None:
         request = self.factory.get("/api/topics/999/")
