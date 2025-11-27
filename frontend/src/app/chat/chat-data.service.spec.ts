@@ -44,6 +44,14 @@ describe('ChatDataService', () => {
     req.flush({ topics: [], next_offset: null });
   });
 
+  it('applies pagination params when provided', () => {
+    service.getTopics({ limit: 15 }).subscribe();
+
+    const req = httpMock.expectOne(`${environment.apiUrl}/topics/?limit=15`);
+    expect(req.request.method).toBe('GET');
+    req.flush({ topics: [], next_offset: null });
+  });
+
   it('fetches topic details', () => {
     service.getTopicDetail(3, { offset: 20, limit: 10 }).subscribe();
 

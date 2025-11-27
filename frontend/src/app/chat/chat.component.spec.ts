@@ -452,4 +452,58 @@ describe('ChatComponent', () => {
     expect(component.selectedTopicId()).toBeNull();
     expect(component.messages().length).toBe(0);
   });
+
+  it('does not request topics while loading or when no more pages exist', () => {
+    (component as any).topicsLoading = true;
+
+    component.loadTopics();
+
+    expect(chatDataService.getTopics).not.toHaveBeenCalled();
+
+    (component as any).topicsLoading = false;
+    (component as any).hasMoreTopics = false;
+
+    component.loadTopics();
+
+    expect(chatDataService.getTopics).not.toHaveBeenCalled();
+  });
+
+  it('clears selection when topic list is empty', () => {
+    component.selectedTopicId.set(1);
+    component.messages.set([
+      { id: 1, from: 'user', content: 'Question' },
+      { id: 2, from: 'assistant', content: 'Answer' },
+    ]);
+
+    chatDataService.getTopics.and.returnValue(of({ topics: [], next_offset: null }));
+
+    component.loadTopics(null, true);
+
+    expect(component.topics()).toEqual([]);
+    expect(component.selectedTopicId()).toBeNull();
+    expect(component.messages().length).toBe(0);
+  });
+
+  it('does not load messages while fetching or when no next page is available', () => {
+    (component as any).messagesLoading = true;
+
+    (component as any).loadMessages(1);
+
+    expect(chatDataService.getTopicDetail).not.toHaveBeenCalled();
+
+    (component as any).messagesLoading = false;
+    (component as any).hasMoreMessages = false;
+
+    (component as any).loadMessages(1);
+
+    expect(chatDataService.getTopicDetail).not.toHaveBeenCalled();
+  });
+
+  it('ignores message scrolls when no topic is selected', () => {
+    component.selectedTopicId.set(null);
+
+    component.onMessagesScrolled(10);
+
+    expect(chatDataService.getTopicDetail).not.toHaveBeenCalled();
+  });
 });
