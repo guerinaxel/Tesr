@@ -1,0 +1,147 @@
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { of, throwError } from 'rxjs';
+
+import { RouterTestingModule } from '@angular/router/testing';
+
+import { AppComponent } from './app.component';
+import { ChatDataService, SearchResponse } from './chat/chat-data.service';
+
+const baseResponse: SearchResponse = {
+  topics: { items: [{ id: 1, name: 'Topic', message_count: 1 }], next_offset: null },
+  questions: { items: [{ id: 5, topic_id: 1, topic_name: 'Topic', content: 'Why?' }], next_offset: null },
+  answers: { items: [{ id: 9, topic_id: 1, topic_name: 'Topic', content: 'Because' }], next_offset: null },
+};
+
+describe('AppComponent', () => {
+  let fixture: ComponentFixture<AppComponent>;
+  let component: AppComponent;
+  let chatDataService: jasmine.SpyObj<ChatDataService>;
+
+  beforeEach(async () => {
+    chatDataService = jasmine.createSpyObj<ChatDataService>('ChatDataService', [
+      'searchEverything',
+    ]);
+
+    await TestBed.configureTestingModule({
+      imports: [AppComponent, RouterTestingModule],
+      providers: [{ provide: ChatDataService, useValue: chatDataService }],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AppComponent);
+    component = fixture.componentInstance;
+    TestBed.runInInjectionContext(() => component.ngOnInit());
+  });
+
+  afterEach(() => {
+    delete (window as any).appComponent;
+    delete (window as any).Cypress;
+  });
+
+  it('debounces global search input and updates results', fakeAsync(() => {
+    chatDataService.searchEverything.and.returnValue(of(baseResponse));
+
+    component.onGlobalSearchChange('  hello ');
+
+    tick(499);
+    expect(chatDataService.searchEverything).not.toHaveBeenCalled();
+
+    tick(1);
+
+    expect(chatDataService.searchEverything).toHaveBeenCalledWith('hello', {
+      limit: 5,
+      topics_offset: 0,
+      questions_offset: 0,
+      answers_offset: 0,
+    });
+    expect(component.globalSearchLoading()).toBeFalse();
+    expect(component.globalSearchResults()).toEqual(baseResponse);
+    expect(component.hasSearchResults()).toBeTrue();
+  }));
+
+  it('clears search state and hides the dropdown', () => {
+    component.globalSearchQuery.set('query');
+    component.globalSearchResults.set(baseResponse);
+    component.searchVisible.set(true);
+
+    component.clearGlobalSearch();
+
+    expect(component.globalSearchQuery()).toBe('');
+    expect(component.globalSearchResults()).toBeNull();
+    expect(component.searchVisible()).toBeFalse();
+    expect(component.searchOffsets()).toEqual({ topics: 0, questions: 0, answers: 0 });
+  });
+
+  it('does not search when the query is empty after trimming', fakeAsync(() => {
+    component.onGlobalSearchChange('   ');
+
+    tick(600);
+
+    expect(chatDataService.searchEverything).not.toHaveBeenCalled();
+    expect(component.globalSearchResults()).toBeNull();
+    expect(component.globalSearchLoading()).toBeFalse();
+  }));
+
+  it('reports no results when the search payload is empty', () => {
+    expect(component.hasSearchResults()).toBeFalse();
+
+    component.globalSearchResults.set({
+      topics: { items: [], next_offset: null },
+      questions: { items: [], next_offset: null },
+      answers: { items: [], next_offset: null },
+    });
+
+    expect(component.hasSearchResults()).toBeFalse();
+  });
+
+  it('loads more results for a category using the stored offsets', () => {
+    chatDataService.searchEverything.and.returnValue(of(baseResponse));
+
+    component.globalSearchQuery.set('topic');
+    component.globalSearchResults.set({
+      ...baseResponse,
+      topics: { ...baseResponse.topics, next_offset: 10 },
+    });
+
+    component.loadMore('topics');
+
+    expect(chatDataService.searchEverything).toHaveBeenCalledWith('topic', {
+      limit: 5,
+      topics_offset: 10,
+      questions_offset: 0,
+      answers_offset: 0,
+    });
+    expect(component.searchOffsets().topics).toBe(10);
+  });
+
+  it('ignores load more when no next offset exists', () => {
+    chatDataService.searchEverything.and.returnValue(of(baseResponse));
+    component.globalSearchQuery.set('topic');
+    component.globalSearchResults.set({ ...baseResponse, topics: { items: [], next_offset: null } });
+
+    component.loadMore('topics');
+
+    expect(chatDataService.searchEverything).not.toHaveBeenCalled();
+  });
+
+  it('resets results and loading state when a search fails', fakeAsync(() => {
+    chatDataService.searchEverything.and.returnValue(
+      throwError(() => new Error('search failed'))
+    );
+
+    component.onGlobalSearchChange('fail');
+    tick(500);
+
+    expect(component.globalSearchResults()).toBeNull();
+    expect(component.globalSearchLoading()).toBeFalse();
+  }));
+
+  it('exposes the component on window when Cypress is present', () => {
+    (window as any).Cypress = true;
+
+    const cypressFixture = TestBed.createComponent(AppComponent);
+    const cypressComponent = cypressFixture.componentInstance;
+    TestBed.runInInjectionContext(() => cypressComponent.ngOnInit());
+
+    expect((window as any).appComponent).toBe(cypressComponent);
+  });
+});
