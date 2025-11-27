@@ -24,11 +24,13 @@ import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
+import { Subject } from 'rxjs';
+import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import {
   ChatDataService,
   CodeQaPayload,
-  TopicDetail,
   TopicSummary,
 } from './chat-data.service';
 
@@ -99,9 +101,38 @@ export class ChatComponent implements OnInit {
   readonly sendingLabel = computed(() =>
     this.isSending() ? 'Envoi...' : 'Envoyer'
   );
+  readonly topicSearchQuery = model('');
+  readonly topicSearchResults = signal<TopicSummary[]>([]);
+  readonly isTopicSearchVisible = signal(false);
+  readonly topicSearchLoading = signal(false);
+
+  private readonly topicSearch$ = new Subject<string>();
 
   ngOnInit(): void {
     this.loadTopics(this.initialTopicId(), true);
+
+    this.topicSearch$
+      .pipe(debounceTime(500), distinctUntilChanged(), takeUntilDestroyed())
+      .subscribe((term) => {
+        const query = term.trim();
+        if (!query) {
+          this.topicSearchResults.set([]);
+          this.topicSearchLoading.set(false);
+          return;
+        }
+
+        this.topicSearchLoading.set(true);
+        this.chatDataService.searchEverything(query, { limit: 5 }).subscribe({
+          next: (res) => {
+            this.topicSearchResults.set(res.topics.items ?? []);
+            this.topicSearchLoading.set(false);
+          },
+          error: () => {
+            this.topicSearchResults.set([]);
+            this.topicSearchLoading.set(false);
+          },
+        });
+      });
   }
 
   onSubmit(): void {
@@ -315,6 +346,30 @@ export class ChatComponent implements OnInit {
 
   topicTrackBy = (_: number, topic: TopicSummary) => topic.id;
   messageTrackBy = (_: number, message: ChatMessage) => message.id;
+
+  openTopicSearch(): void {
+    this.isTopicSearchVisible.set(true);
+    setTimeout(() => {
+      const input = document.querySelector<HTMLInputElement>('#topic-search-input');
+      input?.focus();
+    });
+  }
+
+  closeTopicSearch(): void {
+    this.isTopicSearchVisible.set(false);
+    this.topicSearchQuery.set('');
+    this.topicSearchResults.set([]);
+  }
+
+  onTopicSearchChange(value: string): void {
+    this.topicSearchQuery.set(value);
+    this.topicSearch$.next(value);
+  }
+
+  selectTopicFromSearch(topicId: number): void {
+    this.selectTopic(topicId, true);
+    this.closeTopicSearch();
+  }
 
   private resetMessages(): void {
     this.messages.set([]);

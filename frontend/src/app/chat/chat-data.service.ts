@@ -19,6 +19,26 @@ export interface PaginatedTopicList {
   next_offset: number | null;
 }
 
+export interface SearchCategory<T> {
+  items: T[];
+  next_offset: number | null;
+}
+
+export type SearchTopicResult = TopicSummary;
+
+export interface SearchMessageResult {
+  id: number;
+  topic_id: number;
+  topic_name: string;
+  content: string;
+}
+
+export interface SearchResponse {
+  topics: SearchCategory<SearchTopicResult>;
+  questions: SearchCategory<SearchMessageResult>;
+  answers: SearchCategory<SearchMessageResult>;
+}
+
 export interface CodeQaPayload extends Record<string, string | number | undefined> {
   question: string;
   system_prompt: string;
@@ -59,6 +79,25 @@ export class ChatDataService {
 
   createTopic(name: string) {
     return this.http.post<TopicDetail>(`${this.apiUrl}/topics/`, { name });
+  }
+
+  searchEverything(query: string, options: Record<string, number> = {}) {
+    const params = new HttpParams({
+      fromObject: {
+        q: query,
+        limit: options.limit != null ? String(options.limit) : undefined,
+        topics_offset:
+          options.topics_offset != null ? String(options.topics_offset) : undefined,
+        questions_offset:
+          options.questions_offset != null
+            ? String(options.questions_offset)
+            : undefined,
+        answers_offset:
+          options.answers_offset != null ? String(options.answers_offset) : undefined,
+      },
+    });
+
+    return this.http.get<SearchResponse>(`${this.apiUrl}/search/`, { params });
   }
 
   private buildPaginationParams(options: PaginationOptions): Record<string, string> {

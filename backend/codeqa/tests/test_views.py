@@ -36,6 +36,7 @@ from codeqa.views import (  # noqa: E402
     BuildRagIndexView,
     CodeQAView,
     HealthView,
+    SearchView,
     TopicDetailView,
     TopicListView,
 )
@@ -276,3 +277,52 @@ class TopicViewsTests(TestCase):
         response = TopicDetailView.as_view()(request, topic_id=999)
 
         self.assertEqual(status.HTTP_404_NOT_FOUND, response.status_code)
+
+
+class SearchViewTests(TestCase):
+    def setUp(self) -> None:
+        self.factory = APIRequestFactory()
+        Topic.objects.all().delete()
+
+    def test_returns_grouped_results(self) -> None:
+        alpha = Topic.objects.create(name="Alpha guide")
+        beta = Topic.objects.create(name="Beta release")
+        Message.objects.bulk_create(
+            [
+                Message(topic=alpha, role=Message.ROLE_USER, content="How to deploy?"),
+                Message(topic=alpha, role=Message.ROLE_ASSISTANT, content="Use docker-compose"),
+                Message(topic=beta, role=Message.ROLE_USER, content="Release checklist"),
+                Message(topic=beta, role=Message.ROLE_ASSISTANT, content="Validate migrations"),
+            ]
+        )
+
+        request = self.factory.get("/api/search/?q=release&limit=5")
+        response = SearchView.as_view()(request)
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertEqual(1, len(response.data["topics"]["items"]))
+        self.assertEqual("Beta release", response.data["topics"]["items"][0]["name"])
+        self.assertEqual(1, len(response.data["questions"]["items"]))
+        self.assertEqual("Release checklist", response.data["questions"]["items"][0]["content"])
+        self.assertEqual(1, len(response.data["answers"]["items"]))
+        self.assertIn("migrations", response.data["answers"]["items"][0]["content"])
+
+    def test_supports_offsets(self) -> None:
+        topic = Topic.objects.create(name="Changelog")
+        Message.objects.bulk_create(
+            [
+                Message(topic=topic, role=Message.ROLE_USER, content="First question"),
+                Message(topic=topic, role=Message.ROLE_USER, content="Second question"),
+                Message(topic=topic, role=Message.ROLE_USER, content="Third question"),
+            ]
+        )
+
+        first_page = SearchView.as_view()(self.factory.get("/api/search/?q=question&limit=2"))
+        self.assertEqual(2, len(first_page.data["questions"]["items"]))
+        self.assertEqual(2, first_page.data["questions"]["next_offset"])
+
+        second_page = SearchView.as_view()(
+            self.factory.get("/api/search/?q=question&limit=2&questions_offset=2")
+        )
+        self.assertEqual(1, len(second_page.data["questions"]["items"]))
+        self.assertIsNone(second_page.data["questions"]["next_offset"])

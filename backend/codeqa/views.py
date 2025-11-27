@@ -6,7 +6,7 @@ from typing import Any
 
 from django.http import HttpRequest
 from django.core.management import call_command
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.response import Response
@@ -35,6 +35,16 @@ def _parse_pagination(request: HttpRequest, *, default_limit: int = 20, max_limi
     limit = max(0, min(limit, max_limit))
     offset = max(0, offset)
     return limit, offset
+
+
+def _paginate_queryset(qs, *, limit: int, offset: int) -> tuple[list, int | None]:
+    if limit == 0:
+        has_more = qs.count() > offset
+        return [], offset if has_more else None
+
+    window = list(qs[offset : offset + limit + 1])
+    has_more = len(window) > limit
+    return window[:limit], offset + limit if has_more else None
 
 
 class CodeQAView(APIView):
@@ -169,6 +179,92 @@ class TopicDetailView(APIView):
                     for message in messages_payload
                 ],
                 "next_offset": next_offset,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class SearchView(APIView):
+    """Search topics, questions and answers."""
+
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> Response:
+        query = (request.query_params.get("q") or "").strip()
+        limit, _ = _parse_pagination(request, default_limit=5, max_limit=20)
+        topics_offset = int(request.query_params.get("topics_offset", 0) or 0)
+        questions_offset = int(request.query_params.get("questions_offset", 0) or 0)
+        answers_offset = int(request.query_params.get("answers_offset", 0) or 0)
+
+        if not query:
+            empty_payload = {"items": [], "next_offset": None}
+            return Response(
+                {"topics": empty_payload, "questions": empty_payload, "answers": empty_payload},
+                status=status.HTTP_200_OK,
+            )
+
+        topics = (
+            Topic.objects.annotate(message_count=Count("messages"))
+            .filter(name__icontains=query)
+            .order_by("-created_at", "-id")
+        )
+        topic_items, topics_next = _paginate_queryset(
+            topics, limit=limit, offset=max(0, topics_offset)
+        )
+
+        questions = (
+            Message.objects.select_related("topic")
+            .filter(role=Message.ROLE_USER)
+            .filter(Q(content__icontains=query) | Q(topic__name__icontains=query))
+        )
+        question_items, questions_next = _paginate_queryset(
+            questions, limit=limit, offset=max(0, questions_offset)
+        )
+
+        answers = (
+            Message.objects.select_related("topic")
+            .filter(role=Message.ROLE_ASSISTANT)
+            .filter(Q(content__icontains=query) | Q(topic__name__icontains=query))
+        )
+        answer_items, answers_next = _paginate_queryset(
+            answers, limit=limit, offset=max(0, answers_offset)
+        )
+
+        return Response(
+            {
+                "topics": {
+                    "items": [
+                        {
+                            "id": topic.id,
+                            "name": topic.name,
+                            "message_count": topic.message_count,
+                        }
+                        for topic in topic_items
+                    ],
+                    "next_offset": topics_next,
+                },
+                "questions": {
+                    "items": [
+                        {
+                            "id": message.id,
+                            "topic_id": message.topic_id,
+                            "topic_name": message.topic.name,
+                            "content": message.content,
+                        }
+                        for message in question_items
+                    ],
+                    "next_offset": questions_next,
+                },
+                "answers": {
+                    "items": [
+                        {
+                            "id": message.id,
+                            "topic_id": message.topic_id,
+                            "topic_name": message.topic.name,
+                            "content": message.content,
+                        }
+                        for message in answer_items
+                    ],
+                    "next_offset": answers_next,
+                },
             },
             status=status.HTTP_200_OK,
         )
