@@ -8,8 +8,11 @@ from typing import Any, Dict, List, Tuple
 
 import faiss  # type: ignore
 import joblib
+import numpy as np
 from sentence_transformers import SentenceTransformer
 
+from .embedding_cache import QueryEmbeddingCache, build_cache_from_env
+from .inverted_index import InvertedIndex
 from .keyword_index import KeywordIndex
 
 
@@ -19,6 +22,7 @@ class RagConfig:
     docs_path: Path
     tokenized_docs_path: Path | None = None
     keyword_index_path: Path | None = None
+    whoosh_index_dir: Path | None = None
     embedding_model_name: str = "nomic-ai/nomic-embed-text-v1.5"
     fallback_embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_model_kwargs: Dict[str, Any] | None = None
@@ -32,6 +36,8 @@ class RagConfig:
             self.keyword_index_path = self.docs_path.with_name(
                 f"{self.docs_path.stem}_keywords{self.docs_path.suffix}"
             )
+        if self.whoosh_index_dir is None:
+            self.whoosh_index_dir = self.docs_path.parent / "whoosh_index"
 
 
 class RagIndex:
@@ -53,6 +59,8 @@ class RagIndex:
         self._docs: List[str] = []
         self._tokenized_docs: List[List[str]] = []
         self._keyword_index: KeywordIndex | None = None
+        self._inverted_index: InvertedIndex | None = None
+        self._embedding_cache: QueryEmbeddingCache = build_cache_from_env()
 
     def _ensure_nomic_dependencies(self) -> None:
         try:
@@ -86,6 +94,8 @@ class RagIndex:
             self._config.tokenized_docs_path.parent.mkdir(parents=True, exist_ok=True)
         if self._config.keyword_index_path is not None:
             self._config.keyword_index_path.parent.mkdir(parents=True, exist_ok=True)
+        if self._config.whoosh_index_dir is not None:
+            self._config.whoosh_index_dir.mkdir(parents=True, exist_ok=True)
 
     def _save_index_and_docs(
         self,
@@ -101,6 +111,8 @@ class RagIndex:
             joblib.dump(tokenized_docs, self._config.tokenized_docs_path)
         if self._config.keyword_index_path is not None:
             joblib.dump(keyword_index.to_persisted(), self._config.keyword_index_path)
+        if self._config.whoosh_index_dir is not None:
+            InvertedIndex.build(docs, self._config.whoosh_index_dir)
 
     def _rebuild_index_from_docs(self, docs: List[str]) -> faiss.IndexFlatIP:
         embeddings = self._model.encode(
@@ -132,6 +144,8 @@ class RagIndex:
         self._docs = texts
         self._tokenized_docs = keyword_index.tokenized_docs
         self._keyword_index = keyword_index
+        if self._config.whoosh_index_dir is not None:
+            self._inverted_index = InvertedIndex.from_dir(self._config.whoosh_index_dir)
 
     def load(self) -> None:
         try:
@@ -153,6 +167,11 @@ class RagIndex:
         self._docs = docs
         self._tokenized_docs = tokenized_docs
         self._keyword_index = keyword_index
+        if self._config.whoosh_index_dir is not None:
+            try:
+                self._inverted_index = InvertedIndex.from_dir(self._config.whoosh_index_dir)
+            except FileNotFoundError:
+                self._inverted_index = InvertedIndex.build(docs, self._config.whoosh_index_dir)
 
     def search(self, query: str, k: int = 5, fusion_weight: float = 0.5) -> List[Tuple[str, float]]:
         if (
@@ -160,11 +179,14 @@ class RagIndex:
             or not self._docs
             or self._keyword_index is None
             or not self._tokenized_docs
+            or self._inverted_index is None
         ):
             raise RuntimeError("RAG index not loaded. Call load() first.")
 
         vector_hits = self._search_vectors(query, k)
         keyword_hits = self._keyword_index.search(query, k)
+        inverted_hits = self._inverted_index.search(query, k)
+        keyword_hits = self._merge_keyword_hits(keyword_hits, inverted_hits)
 
         fusion_weight = min(max(fusion_weight, 0.0), 1.0)
         fused = self._fuse_results(vector_hits, keyword_hits, fusion_weight)
@@ -176,9 +198,15 @@ class RagIndex:
         return results
 
     def _search_vectors(self, query: str, k: int) -> List[Tuple[int, float]]:
-        query_emb = self._model.encode(
-            [query], convert_to_numpy=True, normalize_embeddings=True
-        )
+        cached = self._embedding_cache.get(query)
+        if cached is None:
+            encoded = self._model.encode(
+                [query], convert_to_numpy=True, normalize_embeddings=True
+            )
+            cached = encoded[0] if len(encoded.shape) > 1 else encoded
+            self._embedding_cache.set(query, cached)
+
+        query_emb = np.asarray([cached], dtype=np.float32)
         scores, indices = self._index.search(query_emb, k)
         hits: List[Tuple[int, float]] = []
         for idx, score in zip(indices[0], scores[0]):
@@ -186,6 +214,17 @@ class RagIndex:
                 continue
             hits.append((int(idx), float(score)))
         return hits
+
+    def _merge_keyword_hits(
+        self, primary_hits: List[Tuple[int, float]], secondary_hits: List[Tuple[int, float]]
+    ) -> List[Tuple[int, float]]:
+        scores: Dict[int, float] = {}
+        for doc_idx, score in primary_hits:
+            scores[doc_idx] = max(scores.get(doc_idx, 0.0), score)
+        for doc_idx, score in secondary_hits:
+            boosted = score * 1.1  # Slight boost to fuzzy matches
+            scores[doc_idx] = max(scores.get(doc_idx, 0.0), boosted)
+        return sorted(scores.items(), key=lambda item: item[1], reverse=True)
 
     def _fuse_results(
         self,

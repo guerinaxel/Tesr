@@ -70,6 +70,30 @@ class FakeKeywordIndex:
         return self.results[:k]
 
 
+class FakeInvertedIndex:
+    def __init__(self, results: list[tuple[int, float]] | None = None) -> None:
+        self.results = results or []
+        self.searches: list[tuple[str, int]] = []
+        self.built_from: tuple[list[str], Path] | None = None
+        self.loaded_from: Path | None = None
+
+    @classmethod
+    def build(cls, docs: list[str], root_dir: Path):
+        inst = cls()
+        inst.built_from = (list(docs), root_dir)
+        return inst
+
+    @classmethod
+    def from_dir(cls, root_dir: Path):
+        inst = cls()
+        inst.loaded_from = root_dir
+        return inst
+
+    def search(self, query: str, limit: int = 5):
+        self.searches.append((query, limit))
+        return self.results[:limit]
+
+
 class RagIndexWithFakes(SimpleTestCase):
     def setUp(self) -> None:
         self.fake_storage: Dict[str, Any] = {}
@@ -82,6 +106,13 @@ class RagIndexWithFakes(SimpleTestCase):
             SentenceTransformer=FakeModel
         )
         sys.modules["joblib"] = FakeJoblib(self.fake_storage)
+        sys.modules["codeqa.inverted_index"] = types.SimpleNamespace(InvertedIndex=FakeInvertedIndex)
+        sys.modules["codeqa.embedding_cache"] = types.SimpleNamespace(
+            QueryEmbeddingCache=object,
+            build_cache_from_env=lambda: types.SimpleNamespace(
+                get=lambda _query: None, set=lambda _query, _embedding: None
+            )
+        )
 
         from codeqa import rag_index as rag_index_module
 
@@ -90,6 +121,7 @@ class RagIndexWithFakes(SimpleTestCase):
         # Avoid pulling the real Nomic model during tests; use a local placeholder instead.
         rag_index_module.RagConfig.embedding_model_name = "local-test-model"
         rag_index_module.RagConfig.fallback_embedding_model_name = "local-test-model-fallback"
+        rag_index_module.InvertedIndex = FakeInvertedIndex
 
     def test_build_from_texts_persists_embeddings_and_docs(self) -> None:
         from codeqa.rag_index import RagConfig, RagIndex
@@ -121,6 +153,7 @@ class RagIndexWithFakes(SimpleTestCase):
             self.assertEqual(["alpha", "beta"], rag_index._docs)
             self.assertEqual([["alpha"], ["beta"]], rag_index._tokenized_docs)
             self.assertIsInstance(rag_index._index, FakeIndexFlatIP)
+            self.assertIsInstance(rag_index._inverted_index, FakeInvertedIndex)
 
     def test_load_reads_index_and_documents(self) -> None:
         from codeqa.rag_index import RagConfig, RagIndex
@@ -156,6 +189,7 @@ class RagIndexWithFakes(SimpleTestCase):
             self.assertEqual(["doc1", "doc2"], rag_index._docs)
             self.assertEqual([["doc1"], ["doc2"]], rag_index._tokenized_docs)
             self.assertIsNotNone(rag_index._keyword_index)
+            self.assertIsInstance(rag_index._inverted_index, FakeInvertedIndex)
 
     def test_search_returns_scored_results(self) -> None:
         from codeqa.rag_index import RagConfig, RagIndex
@@ -173,6 +207,7 @@ class RagIndexWithFakes(SimpleTestCase):
         rag_index._docs = ["first doc", "second doc"]
         rag_index._tokenized_docs = [["first", "doc"], ["second", "doc"]]
         rag_index._keyword_index = FakeKeywordIndex([(1, 1.0), (0, 0.2)])
+        rag_index._inverted_index = FakeInvertedIndex([(0, 0.8)])
 
         # Act
         results = rag_index.search("What is inside?", k=2, fusion_weight=0.2)
@@ -182,6 +217,45 @@ class RagIndexWithFakes(SimpleTestCase):
         self.assertEqual("second doc", results[0][0])
         self.assertGreater(results[0][1], results[1][1])
         self.assertEqual([("What is inside?", 2)], rag_index._keyword_index.searches)
+        self.assertEqual([("What is inside?", 2)], rag_index._inverted_index.searches)
+
+    def test_query_embedding_cache_prevents_duplicate_encode(self) -> None:
+        from codeqa.rag_index import RagConfig, RagIndex
+
+        rag_index = RagIndex(
+            RagConfig(
+                index_path=Path("idx"),
+                docs_path=Path("docs"),
+                embedding_model_name="local-model",
+                fallback_embedding_model_name="local-fallback",
+            )
+        )
+        rag_index._index = FakeIndexFlatIP(3)
+        rag_index._docs = ["doc"]
+        rag_index._tokenized_docs = [["doc"]]
+        rag_index._keyword_index = FakeKeywordIndex([(0, 1.0)])
+        rag_index._inverted_index = FakeInvertedIndex([(0, 1.0)])
+
+        cache_calls: dict[str, int] = {"set": 0, "encode": 0}
+
+        class CachedModel(FakeModel):
+            def encode(self, texts, convert_to_numpy=True, normalize_embeddings=True):  # type: ignore[override]
+                cache_calls["encode"] += 1
+                return super().encode(
+                    texts,
+                    convert_to_numpy=convert_to_numpy,
+                    normalize_embeddings=normalize_embeddings,
+                )
+
+        rag_index._model = CachedModel()
+        rag_index._embedding_cache = types.SimpleNamespace(
+            get=lambda _query: np.array([0.1, 0.2, 0.3], dtype=float),
+            set=lambda _query, _embedding: cache_calls.__setitem__("set", cache_calls["set"] + 1),
+        )
+
+        rag_index.search("cached", k=1)
+        self.assertEqual(0, cache_calls["encode"])
+        self.assertEqual(0, cache_calls["set"])
 
     def test_falls_back_to_secondary_model_on_load_error(self) -> None:
         from codeqa import rag_index as rag_index_module
