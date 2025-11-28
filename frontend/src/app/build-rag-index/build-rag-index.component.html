@@ -18,11 +18,14 @@
             type="text"
             [(ngModel)]="root"
             placeholder="/workspace/project"
-            [disabled]="isSubmitting"
+            [disabled]="isSubmitting || isLoadingRoot"
             data-cy="root-input"
           />
           <mat-icon matSuffix aria-hidden="true">folder</mat-icon>
-          <mat-hint>Optionnel&nbsp;: laissez vide pour la racine par défaut.</mat-hint>
+          <mat-hint>
+            Optionnel&nbsp;: laissez vide pour la racine par défaut.
+            <ng-container *ngIf="lastUsedRoot">Dernier chemin utilisé : {{ lastUsedRoot }}</ng-container>
+          </mat-hint>
         </mat-form-field>
 
         <button
@@ -40,6 +43,18 @@
           ></mat-progress-spinner>
           <mat-icon *ngIf="!isSubmitting" aria-hidden="true">rocket_launch</mat-icon>
           <span>{{ isSubmitting ? 'Envoi...' : 'Lancer la construction' }}</span>
+        </button>
+
+        <button
+          mat-stroked-button
+          color="primary"
+          type="button"
+          [disabled]="isSubmitting || !lastUsedRoot"
+          (click)="onRebuild()"
+          data-cy="rebuild-button"
+        >
+          <mat-icon aria-hidden="true">replay</mat-icon>
+          <span>Reconstruire avec le dernier chemin</span>
         </button>
       </form>
 
