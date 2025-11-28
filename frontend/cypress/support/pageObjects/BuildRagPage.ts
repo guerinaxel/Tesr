@@ -10,7 +10,7 @@ export class BuildRagPage {
   }
 
   typeRootPath(path: string) {
-    cy.get('[data-cy="root-input"]').type(path);
+    cy.get('[data-cy="root-input"]').clear().type(path);
     return this;
   }
 
