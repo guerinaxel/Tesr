@@ -10,6 +10,12 @@ describe('BuildRagIndexComponent', () => {
   let component: BuildRagIndexComponent;
   let httpMock: HttpTestingController;
 
+  const flushInitialRoot = (value: string | null = '/workspace/default') => {
+    const initReq = httpMock.expectOne(`${environment.apiUrl}/code-qa/build-rag/`);
+    expect(initReq.request.method).toBe('GET');
+    initReq.flush({ root: value });
+  };
+
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [BuildRagIndexComponent, HttpClientTestingModule, NoopAnimationsModule],
@@ -18,10 +24,17 @@ describe('BuildRagIndexComponent', () => {
     fixture = TestBed.createComponent(BuildRagIndexComponent);
     component = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);
+    fixture.detectChanges();
+    flushInitialRoot();
   });
 
   afterEach(() => {
     httpMock.verify();
+  });
+
+  it('loads the last used root on init', () => {
+    expect(component.root).toBe('/workspace/default');
+    expect(component.lastUsedRoot).toBe('/workspace/default');
   });
 
   it('sends the root value to the backend and shows a success toast', () => {
@@ -39,6 +52,7 @@ describe('BuildRagIndexComponent', () => {
       jasmine.objectContaining({ type: 'success' })
     );
     expect(component.isSubmitting).toBeFalse();
+    expect(component.lastUsedRoot).toBe('/workspace/project');
   });
 
   it('shows an error toast when the request fails', () => {
@@ -66,5 +80,17 @@ describe('BuildRagIndexComponent', () => {
 
     requests[0].flush({ detail: 'done' });
     expect(component.isSubmitting).toBeFalse();
+  });
+
+  it('rebuilds using the last known root value', () => {
+    component.lastUsedRoot = '/stored/root';
+    component.onRebuild();
+
+    const request = httpMock.expectOne(`${environment.apiUrl}/code-qa/build-rag/`);
+    expect(request.request.body).toEqual({ root: '/stored/root' });
+    request.flush({ detail: 'ok', root: '/stored/root' });
+
+    expect(component.root).toBe('/stored/root');
+    expect(component.lastUsedRoot).toBe('/stored/root');
   });
 });

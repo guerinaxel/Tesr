@@ -56,6 +56,10 @@ export const stubBuildRag = (alias = 'buildRag') => {
   }).as(alias);
 };
 
+export const stubLastRagRoot = (root: string, alias = 'lastRagRoot') => {
+  cy.intercept('GET', `${apiUrl}/code-qa/build-rag/`, { root }).as(alias);
+};
+
 export const stubSearch = (
   query: Record<string, string | undefined>,
   responseBody: unknown,

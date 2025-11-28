@@ -4,6 +4,11 @@ export class BuildRagPage {
     return this;
   }
 
+  expectRootValue(path: string) {
+    cy.get('[data-cy="root-input"]').should('have.value', path);
+    return this;
+  }
+
   typeRootPath(path: string) {
     cy.get('[data-cy="root-input"]').type(path);
     return this;
@@ -11,6 +16,11 @@ export class BuildRagPage {
 
   launchBuild() {
     cy.get('[data-cy="launch-button"]').click();
+    return this;
+  }
+
+  clickRebuild() {
+    cy.get('[data-cy="rebuild-button"]').click();
     return this;
   }
 

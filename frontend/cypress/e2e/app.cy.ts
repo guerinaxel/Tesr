@@ -7,6 +7,7 @@ import {
   stubCreateTopic,
   stubSearch,
   stubSendQuestion,
+  stubLastRagRoot,
   stubTopicDetail,
   stubTopicList,
 } from '../support/utils/apiStubs';
@@ -140,13 +141,19 @@ describe('AI Code Assistant app', () => {
 
   it('navigates to the Build RAG page and triggers an index build', () => {
     stubTopicList([]);
+    stubLastRagRoot('/workspace/latest');
     stubBuildRag();
 
     chatPage.visit();
     chatPage.clickBuildRagNav();
 
     const buildRagPage = new BuildRagPage();
-    buildRagPage.assertOnPage();
+    buildRagPage.assertOnPage().expectRootValue('/workspace/latest');
+    cy.wait('@lastRagRoot');
+
+    buildRagPage.clickRebuild();
+    cy.wait('@buildRag').its('request.body').should('deep.equal', { root: '/workspace/latest' });
+
     buildRagPage.typeRootPath('/workspace/project').launchBuild();
 
     cy.wait('@buildRag').its('request.body').should('deep.equal', { root: '/workspace/project' });

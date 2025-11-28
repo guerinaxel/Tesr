@@ -16,10 +16,12 @@ class AnswerNotReadyError(RuntimeError):
 _rag_index: RagIndex | None = None
 
 
+def _get_data_dir() -> Path:
+    return Path(os.getenv("RAG_DATA_DIR", Path(__file__).resolve().parent / "data"))
+
+
 def _get_paths_from_env() -> tuple[Path, Path]:
-    data_dir = Path(
-        os.getenv("RAG_DATA_DIR", Path(__file__).resolve().parent / "data")
-    )
+    data_dir = _get_data_dir()
     index_path = Path(os.getenv("RAG_INDEX_PATH", data_dir / "rag_index.faiss"))
     docs_path = Path(os.getenv("RAG_DOCS_PATH", data_dir / "rag_docs.pkl"))
     return index_path, docs_path

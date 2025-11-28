@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 import types
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -31,6 +34,7 @@ from codeqa import rag_index as rag_index_module  # noqa: E402
 importlib.reload(rag_index_module)
 from codeqa import rag_service as rag_service_module  # noqa: E402
 importlib.reload(rag_service_module)
+from codeqa.rag_state import get_default_root, load_last_root, save_last_root  # noqa: E402
 from codeqa.models import Message, Topic  # noqa: E402
 from codeqa.views import (  # noqa: E402
     BuildRagIndexView,
@@ -187,6 +191,10 @@ class HealthViewTests(SimpleTestCase):
 class BuildRagIndexViewTests(SimpleTestCase):
     def setUp(self) -> None:
         self.factory = APIRequestFactory()
+        self.tmpdir = TemporaryDirectory()
+        os.environ["RAG_DATA_DIR"] = self.tmpdir.name
+        self.addCleanup(self.tmpdir.cleanup)
+        self.addCleanup(os.environ.pop, "RAG_DATA_DIR", None)
 
     def test_triggers_build_with_custom_root(self) -> None:
         request = self.factory.post(
@@ -201,9 +209,12 @@ class BuildRagIndexViewTests(SimpleTestCase):
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         args, kwargs = mock_call_command.call_args
         self.assertEqual("build_rag_index", args[0])
-        self.assertEqual("/tmp/project", kwargs["root"])
+        expected_root = str(Path("/tmp/project").resolve())
+        self.assertEqual(expected_root, kwargs["root"])
         self.assertIn("stdout", kwargs)
         self.assertIn("stderr", kwargs)
+        self.assertEqual(expected_root, response.data["root"])
+        self.assertEqual(expected_root, load_last_root())
 
     def test_defaults_root_when_missing(self) -> None:
         request = self.factory.post("/api/code-qa/build-rag/", {}, format="json")
@@ -214,6 +225,8 @@ class BuildRagIndexViewTests(SimpleTestCase):
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         _args, kwargs = mock_call_command.call_args
         self.assertNotIn("root", kwargs)
+        self.assertEqual(get_default_root(), response.data["root"])
+        self.assertEqual(get_default_root(), load_last_root())
 
     def test_returns_error_on_failure(self) -> None:
         request = self.factory.post("/api/code-qa/build-rag/", {}, format="json")
@@ -223,6 +236,24 @@ class BuildRagIndexViewTests(SimpleTestCase):
 
         self.assertEqual(status.HTTP_500_INTERNAL_SERVER_ERROR, response.status_code)
         self.assertIn("detail", response.data)
+
+    def test_get_returns_last_used_root(self) -> None:
+        stored_root = str(Path(self.tmpdir.name) / "project")
+        save_last_root(stored_root)
+
+        request = self.factory.get("/api/code-qa/build-rag/")
+        response = BuildRagIndexView.as_view()(request)
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertEqual(stored_root, response.data["root"])
+
+    def test_get_returns_default_when_state_missing(self) -> None:
+        request = self.factory.get("/api/code-qa/build-rag/")
+
+        response = BuildRagIndexView.as_view()(request)
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertEqual(get_default_root(), response.data["root"])
 
 
 class TopicViewsTests(TestCase):

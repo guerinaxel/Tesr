@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 from io import StringIO
+from pathlib import Path
 from typing import Any
 
 from django.http import HttpRequest
@@ -13,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import rag_service
+from .rag_state import get_default_root, load_last_root, save_last_root
 from .models import Message, Topic
 from .serializers import (
     BuildRagRequestSerializer,
@@ -281,17 +283,22 @@ class HealthView(APIView):
 class BuildRagIndexView(APIView):
     """Trigger rebuilding the RAG index via the management command."""
 
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> Response:
+        return Response({"root": load_last_root()}, status=status.HTTP_200_OK)
+
     def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> Response:
         serializer = BuildRagRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        root = serializer.validated_data.get("root") or None
+        raw_root = serializer.validated_data.get("root") or None
+        root = raw_root.strip() if isinstance(raw_root, str) else None
+        resolved_root = Path(root or get_default_root()).resolve()
         stdout, stderr = StringIO(), StringIO()
 
         try:
             command_kwargs: dict[str, Any] = {"stdout": stdout, "stderr": stderr}
             if root:
-                command_kwargs["root"] = root
+                command_kwargs["root"] = str(resolved_root)
 
             call_command("build_rag_index", **command_kwargs)
         except Exception:
@@ -303,9 +310,11 @@ class BuildRagIndexView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+        save_last_root(str(resolved_root))
         return Response(
             {
                 "detail": "RAG index build triggered.",
+                "root": str(resolved_root),
                 "output": stdout.getvalue(),
                 "errors": stderr.getvalue(),
             },
