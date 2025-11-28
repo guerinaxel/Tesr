@@ -17,3 +17,4 @@ ollama>=0.3.0
 unittest-xml-reporting>=3.2
 coverage>=7.6
 tree_sitter_languages>=1.10
+pytest-django>=4.8

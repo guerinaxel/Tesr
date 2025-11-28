@@ -14,7 +14,7 @@ describe('ChatComponent', () => {
   beforeEach(async () => {
     chatDataService = jasmine.createSpyObj<ChatDataService>(
       'ChatDataService',
-      ['sendQuestion', 'getTopics', 'getTopicDetail', 'createTopic']
+      ['sendQuestion', 'getTopics', 'getTopicDetail', 'createTopic', 'searchEverything']
     );
 
     await TestBed.configureTestingModule({
@@ -31,6 +31,13 @@ describe('ChatComponent', () => {
       of({ id: 1, name: 'Default', message_count: 0, messages: [], next_offset: null })
     );
     chatDataService.getTopics.and.returnValue(of({ topics: [], next_offset: null }));
+    fixture.detectChanges();
+    chatDataService.getTopics.calls.reset();
+
+    component.topics.set([{ id: 1, name: 'Default', message_count: 0 }]);
+    component.selectedTopicId.set(1);
+    (component as any).hasMoreTopics = true;
+    (component as any).topicsOffset = 0;
   });
 
   it('sends a question to the backend and appends the assistant answer', fakeAsync(() => {
@@ -506,4 +513,72 @@ describe('ChatComponent', () => {
 
     expect(chatDataService.getTopicDetail).not.toHaveBeenCalled();
   });
+
+  it('debounces topic search input and captures results', fakeAsync(() => {
+    chatDataService.searchEverything.and.returnValue(
+      of({
+        topics: { items: [{ id: 7, name: 'Match', message_count: 1 }], next_offset: null },
+        questions: { items: [], next_offset: null },
+        answers: { items: [], next_offset: null },
+      })
+    );
+
+    component.onTopicSearchChange('  search  ');
+
+    tick(400);
+    expect(chatDataService.searchEverything).not.toHaveBeenCalled();
+
+    tick(100);
+
+    expect(chatDataService.searchEverything).toHaveBeenCalledWith('search', { limit: 5 });
+    expect(component.topicSearchLoading()).toBeFalse();
+    expect(component.topicSearchResults()[0]).toEqual(
+      jasmine.objectContaining({ id: 7, name: 'Match' })
+    );
+  }));
+
+  it('clears topic search results for empty input', fakeAsync(() => {
+    component.topicSearchResults.set([{ id: 1, name: 'Keep', message_count: 1 }]);
+    component.topicSearchLoading.set(true);
+
+    component.onTopicSearchChange('   ');
+
+    tick(600);
+
+    expect(chatDataService.searchEverything).not.toHaveBeenCalled();
+    expect(component.topicSearchResults()).toEqual([]);
+    expect(component.topicSearchLoading()).toBeFalse();
+  }));
+
+  it('resets topic search state when the API errors', fakeAsync(() => {
+    chatDataService.searchEverything.and.returnValue(
+      throwError(() => new Error('fail'))
+    );
+
+    component.onTopicSearchChange('oops');
+    tick(500);
+
+    expect(component.topicSearchResults()).toEqual([]);
+    expect(component.topicSearchLoading()).toBeFalse();
+  }));
+
+  it('opens and closes the topic search overlay and tracks list entries', fakeAsync(() => {
+    component.topicSearchResults.set([{ id: 4, name: 'Focus', message_count: 0 }]);
+    component.topicSearchQuery.set('Focus');
+
+    component.openTopicSearch();
+    expect(component.isTopicSearchVisible()).toBeTrue();
+
+    tick();
+
+    component.closeTopicSearch();
+
+    expect(component.isTopicSearchVisible()).toBeFalse();
+    expect(component.topicSearchQuery()).toBe('');
+    expect(component.topicSearchResults()).toEqual([]);
+    expect(component.topicTrackBy(0, { id: 3, name: 'Track', message_count: 0 })).toBe(3);
+    expect(
+      component.messageTrackBy(0, { id: 7, from: 'assistant', content: 'Answer' })
+    ).toBe(7);
+  }));
 });

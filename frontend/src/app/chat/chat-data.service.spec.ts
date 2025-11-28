@@ -82,4 +82,43 @@ describe('ChatDataService', () => {
       next_offset: null,
     });
   });
+
+  it('searches across topics, questions, and answers with pagination', () => {
+    service.searchEverything('term', {
+      limit: 5,
+      topics_offset: 10,
+      questions_offset: 20,
+      answers_offset: 30,
+    }).subscribe();
+
+    const req = httpMock.expectOne(
+      `${environment.apiUrl}/search/?q=term&limit=5&topics_offset=10&questions_offset=20&answers_offset=30`
+    );
+    expect(req.request.method).toBe('GET');
+    req.flush({
+      topics: { items: [], next_offset: null },
+      questions: { items: [], next_offset: null },
+      answers: { items: [], next_offset: null },
+    });
+  });
+
+  it('searches without optional offsets', () => {
+    service.searchEverything('quick').subscribe();
+
+    const req = httpMock.expectOne(`${environment.apiUrl}/search/?q=quick`);
+    expect(req.request.method).toBe('GET');
+    req.flush({
+      topics: { items: [], next_offset: null },
+      questions: { items: [], next_offset: null },
+      answers: { items: [], next_offset: null },
+    });
+  });
+
+  it('applies an offset without a limit when fetching topics', () => {
+    service.getTopics({ offset: 30 }).subscribe();
+
+    const req = httpMock.expectOne(`${environment.apiUrl}/topics/?offset=30`);
+    expect(req.request.method).toBe('GET');
+    req.flush({ topics: [], next_offset: null });
+  });
 });

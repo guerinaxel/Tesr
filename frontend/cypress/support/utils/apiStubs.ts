@@ -55,3 +55,13 @@ export const stubBuildRag = (alias = 'buildRag') => {
     req.reply({ statusCode: 200, body: {} });
   }).as(alias);
 };
+
+export const stubSearch = (
+  query: Record<string, string | undefined>,
+  responseBody: unknown,
+  alias = 'search'
+) => {
+  cy.intercept('GET', '**/search/**', (req) => {
+    req.reply({ statusCode: 200, body: responseBody });
+  }).as(alias);
+};
