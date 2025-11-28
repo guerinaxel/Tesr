@@ -3,7 +3,7 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { of, throwError } from 'rxjs';
 
 import { ChatComponent } from './chat.component';
-import { ChatDataService } from './chat-data.service';
+import { ChatDataService, StreamChunk } from './chat-data.service';
 
 
 describe('ChatComponent', () => {
@@ -14,7 +14,7 @@ describe('ChatComponent', () => {
   beforeEach(async () => {
     chatDataService = jasmine.createSpyObj<ChatDataService>(
       'ChatDataService',
-      ['sendQuestion', 'getTopics', 'getTopicDetail', 'createTopic', 'searchEverything']
+      ['streamQuestion', 'sendQuestion', 'getTopics', 'getTopicDetail', 'createTopic', 'searchEverything']
     );
 
     await TestBed.configureTestingModule({
@@ -40,11 +40,18 @@ describe('ChatComponent', () => {
     (component as any).topicsOffset = 0;
   });
 
-  it('sends a question to the backend and appends the assistant answer', fakeAsync(() => {
+  it('streams a question to the backend and appends the assistant answer', fakeAsync(() => {
     // Arrange
     component.question.set('Explain RAG');
 
-    chatDataService.sendQuestion.and.returnValue(of({ answer: 'Contextual explanation' }));
+    chatDataService.streamQuestion.and.returnValue(
+      of(
+        { event: 'meta', data: {} } as StreamChunk,
+        { event: 'token', data: 'Contextual ' } as StreamChunk,
+        { event: 'token', data: 'explanation' } as StreamChunk,
+        { event: 'done', data: { answer: 'Contextual explanation' } } as StreamChunk
+      )
+    );
     chatDataService.getTopicDetail.and.returnValue(
       of({ id: 1, name: 'Default', message_count: 2, messages: [], next_offset: null })
     );
@@ -53,7 +60,7 @@ describe('ChatComponent', () => {
     component.onSubmit();
 
     // Assert
-    expect(chatDataService.sendQuestion).toHaveBeenCalledWith({
+    expect(chatDataService.streamQuestion).toHaveBeenCalledWith({
       question: 'Explain RAG',
       system_prompt: 'code expert',
       topic_id: 1,
@@ -79,7 +86,7 @@ describe('ChatComponent', () => {
     component.onSubmit();
 
     // Assert
-    expect(chatDataService.sendQuestion).not.toHaveBeenCalled();
+    expect(chatDataService.streamQuestion).not.toHaveBeenCalled();
   });
 
   it('sends a custom prompt when selected', () => {
@@ -88,7 +95,9 @@ describe('ChatComponent', () => {
     component.systemPrompt.set('custom');
     component.customPrompt.set('You are concise');
 
-    chatDataService.sendQuestion.and.returnValue(of({ answer: 'Acknowledged' }));
+    chatDataService.streamQuestion.and.returnValue(
+      of({ event: 'done', data: { answer: 'Acknowledged' } } as StreamChunk)
+    );
     chatDataService.getTopicDetail.and.returnValue(
       of({ id: 1, name: 'Default', message_count: 2, messages: [], next_offset: null })
     );
@@ -97,7 +106,7 @@ describe('ChatComponent', () => {
     component.onSubmit();
 
     // Assert
-    expect(chatDataService.sendQuestion).toHaveBeenCalledWith({
+    expect(chatDataService.streamQuestion).toHaveBeenCalledWith({
       question: 'Customise the system',
       system_prompt: 'custom',
       custom_prompt: 'You are concise',
@@ -109,7 +118,9 @@ describe('ChatComponent', () => {
     // Arrange
     component.question.set('Quick send');
 
-    chatDataService.sendQuestion.and.returnValue(of({ answer: 'Delivered' }));
+    chatDataService.streamQuestion.and.returnValue(
+      of({ event: 'done', data: { answer: 'Delivered' } } as StreamChunk)
+    );
     chatDataService.getTopicDetail.and.returnValue(
       of({ id: 1, name: 'Default', message_count: 2, messages: [], next_offset: null })
     );
@@ -120,7 +131,7 @@ describe('ChatComponent', () => {
     );
 
     // Assert
-    expect(chatDataService.sendQuestion).toHaveBeenCalledWith({
+    expect(chatDataService.streamQuestion).toHaveBeenCalledWith({
       question: 'Quick send',
       system_prompt: 'code expert',
       topic_id: 1,
@@ -142,7 +153,7 @@ describe('ChatComponent', () => {
     component.onSpaceSend(new KeyboardEvent('keydown', { key: ' ' }));
 
     // Assert
-    expect(chatDataService.sendQuestion).not.toHaveBeenCalled();
+    expect(chatDataService.streamQuestion).not.toHaveBeenCalled();
     expect(component.messages().length).toBe(0);
     expect(component.isSending()).toBeFalse();
   });
@@ -157,7 +168,7 @@ describe('ChatComponent', () => {
     );
 
     // Assert
-    expect(chatDataService.sendQuestion).not.toHaveBeenCalled();
+    expect(chatDataService.streamQuestion).not.toHaveBeenCalled();
   });
 
   it('does not send when custom prompt is missing', () => {
@@ -170,7 +181,7 @@ describe('ChatComponent', () => {
     component.onSubmit();
 
     // Assert
-    expect(chatDataService.sendQuestion).not.toHaveBeenCalled();
+    expect(chatDataService.streamQuestion).not.toHaveBeenCalled();
     expect(component.messages().length).toBe(0);
     expect(component.isSending()).toBeFalse();
   });
@@ -183,7 +194,7 @@ describe('ChatComponent', () => {
     component.onSubmit();
 
     // Assert
-    expect(chatDataService.sendQuestion).not.toHaveBeenCalled();
+    expect(chatDataService.streamQuestion).not.toHaveBeenCalled();
     expect(component.messages().length).toBe(0);
     expect(component.isSending()).toBeFalse();
   });
@@ -192,8 +203,8 @@ describe('ChatComponent', () => {
     // Arrange
     component.question.set('Trigger error');
 
-    chatDataService.sendQuestion.and.returnValue(
-      throwError(() => ({ error: { detail: 'Service unavailable' } }))
+    chatDataService.streamQuestion.and.returnValue(
+      throwError(() => new Error('Service unavailable'))
     );
 
     // Act
@@ -424,7 +435,7 @@ describe('ChatComponent', () => {
   it('sends on ctrl+space or meta+space but not while sending', () => {
     // Arrange
     component.question.set('Meta send');
-    chatDataService.sendQuestion.and.returnValue(of({ answer: 'done' }));
+    chatDataService.streamQuestion.and.returnValue(of({ event: 'done', data: { answer: 'done' } }));
     chatDataService.getTopicDetail.and.returnValue(
       of({ id: 1, name: 'Default', message_count: 0, messages: [], next_offset: null })
     );
@@ -435,7 +446,7 @@ describe('ChatComponent', () => {
     );
 
     // Assert
-    expect(chatDataService.sendQuestion).toHaveBeenCalledTimes(1);
+    expect(chatDataService.streamQuestion).toHaveBeenCalledTimes(1);
 
     // Arrange
     component.isSending.set(true);
@@ -447,7 +458,7 @@ describe('ChatComponent', () => {
     );
 
     // Assert
-    expect(chatDataService.sendQuestion).toHaveBeenCalledTimes(1);
+    expect(chatDataService.streamQuestion).toHaveBeenCalledTimes(1);
   });
 
   it('loads more topics when the viewport nears the end', () => {

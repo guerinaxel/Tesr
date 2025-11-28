@@ -29,6 +29,11 @@ sys.modules["ollama"] = types.SimpleNamespace(
     ChatResponse=SimpleNamespace,
     chat=lambda model, messages, **kwargs: SimpleNamespace(message=SimpleNamespace(content="ai")),
 )
+sys.modules["codeqa.inverted_index"] = types.SimpleNamespace(InvertedIndex=SimpleNamespace)
+sys.modules["codeqa.embedding_cache"] = types.SimpleNamespace(
+    QueryEmbeddingCache=object,
+    build_cache_from_env=lambda: SimpleNamespace(get=lambda _q: None, set=lambda _q, _e: None)
+)
 
 from codeqa import rag_index as rag_index_module  # noqa: E402
 importlib.reload(rag_index_module)
@@ -38,6 +43,7 @@ from codeqa.rag_state import get_default_root, load_last_root, save_last_root  #
 from codeqa.models import Message, Topic  # noqa: E402
 from codeqa.views import (  # noqa: E402
     BuildRagIndexView,
+    CodeQAStreamView,
     CodeQAView,
     HealthView,
     SearchView,
@@ -115,6 +121,25 @@ class CodeQAViewTests(TestCase):
             },
             captured,
         )
+
+    def test_stream_view_emits_sse_events(self) -> None:
+        rag_service_module.stream_answer = lambda **kwargs: (
+            {"num_contexts": 1},
+            ["chunk-one", "chunk-two"],
+        )
+
+        request = self.factory.post(
+            "/api/code-qa/stream/",
+            {"question": "Hello?", "system_prompt": "code expert"},
+            format="json",
+        )
+
+        response = CodeQAStreamView.as_view()(request)
+        body = b"".join(response.streaming_content).decode()
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertIn("meta", body)
+        self.assertIn("chunk-two", body)
 
     def test_records_exchange_when_topic_provided(self) -> None:
         # Arrange

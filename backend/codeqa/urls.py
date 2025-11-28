@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     BuildRagIndexView,
     CodeQAView,
+    CodeQAStreamView,
     HealthView,
     SearchView,
     TopicDetailView,
@@ -11,6 +12,7 @@ from .views import (
 
 urlpatterns = [
     path("code-qa/", CodeQAView.as_view(), name="code-qa"),
+    path("code-qa/stream/", CodeQAStreamView.as_view(), name="code-qa-stream"),
     path("code-qa/health/", HealthView.as_view(), name="code-qa-health"),
     path("code-qa/build-rag/", BuildRagIndexView.as_view(), name="code-qa-build-rag"),
     path("topics/", TopicListView.as_view(), name="topic-list"),

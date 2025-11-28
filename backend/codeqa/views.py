@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import inspect
+import json
 from io import StringIO
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
-from django.http import HttpRequest
+from django.http import HttpRequest, StreamingHttpResponse
 from django.core.management import call_command
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
@@ -109,6 +110,82 @@ class CodeQAView(APIView):
             )
 
         return Response({"answer": answer, "meta": meta}, status=status.HTTP_200_OK)
+
+
+def _format_sse(data: dict) -> str:
+    return f"data: {json.dumps(data)}\n\n"
+
+
+class CodeQAStreamView(APIView):
+    """Stream LLM responses over SSE for chat-like UX."""
+
+    def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> StreamingHttpResponse | Response:
+        serializer = CodeQuestionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        question: str = serializer.validated_data["question"]
+        top_k: int = serializer.validated_data["top_k"]
+        fusion_weight: float = serializer.validated_data.get("fusion_weight", 0.5)
+        system_prompt: str = serializer.validated_data["system_prompt"]
+        custom_prompt: str | None = serializer.validated_data.get("custom_prompt")
+        typo_prompt: str | None = serializer.validated_data.get("custom_pront")
+        topic_id: int | None = serializer.validated_data.get("topic_id")
+
+        topic: Topic | None = None
+        if topic_id is not None:
+            topic = Topic.objects.filter(id=topic_id).first()
+            if topic is None:
+                return Response(
+                    {"detail": "Topic not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        try:
+            meta, token_stream = rag_service.stream_answer(
+                question=question,
+                top_k=top_k,
+                fusion_weight=fusion_weight,
+                system_prompt=system_prompt,
+                custom_prompt=custom_prompt or typo_prompt,
+            )
+        except rag_service.AnswerNotReadyError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except Exception as exc:  # pragma: no cover - defensive path
+            return Response(
+                {"detail": "Internal server error.", "errors": str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        def event_stream() -> Iterable[str]:
+            yield _format_sse({"event": "meta", "data": meta})
+            answer_parts: list[str] = []
+
+            try:
+                for token in token_stream:
+                    answer_parts.append(token)
+                    yield _format_sse({"event": "token", "data": token})
+            except Exception as exc:  # pragma: no cover - streaming failure
+                yield _format_sse({"event": "error", "data": str(exc)})
+                return
+
+            final_answer = "".join(answer_parts).strip()
+            if topic is not None and final_answer:
+                Message.objects.bulk_create(
+                    [
+                        Message(topic=topic, role=Message.ROLE_USER, content=question),
+                        Message(topic=topic, role=Message.ROLE_ASSISTANT, content=final_answer),
+                    ]
+                )
+
+            yield _format_sse({"event": "done", "data": {"answer": final_answer, "meta": meta}})
+
+        response = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return response
 
 
 class TopicListView(APIView):
