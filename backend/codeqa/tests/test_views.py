@@ -52,6 +52,7 @@ class CodeQAViewTests(TestCase):
         Topic.objects.all().delete()
 
     def test_post_returns_answer_payload(self) -> None:
+        # Arrange
         def fake_answer_question(question: str, top_k: int, system_prompt: str, custom_prompt: str | None = None):
             return "answer text", {"num_contexts": 1, "prompt": system_prompt, "custom": custom_prompt}
 
@@ -63,8 +64,10 @@ class CodeQAViewTests(TestCase):
         )
         view = CodeQAView.as_view()
 
+        # Act
         response = view(request)
 
+        # Assert
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertEqual("answer text", response.data["answer"])
         self.assertEqual(1, response.data["meta"]["num_contexts"])
@@ -72,6 +75,7 @@ class CodeQAViewTests(TestCase):
         self.assertIsNone(response.data["meta"]["custom"])
 
     def test_custom_prompt_is_forwarded(self) -> None:
+        # Arrange
         captured: dict[str, str | None] = {}
 
         def fake_answer_question(
@@ -97,8 +101,10 @@ class CodeQAViewTests(TestCase):
             format="json",
         )
 
+        # Act
         response = CodeQAView.as_view()(request)
 
+        # Assert
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertEqual(
             {
@@ -111,6 +117,7 @@ class CodeQAViewTests(TestCase):
         )
 
     def test_records_exchange_when_topic_provided(self) -> None:
+        # Arrange
         topic = Topic.objects.create(name="New thread")
 
         def fake_answer_question(
@@ -128,8 +135,10 @@ class CodeQAViewTests(TestCase):
             format="json",
         )
 
+        # Act
         response = CodeQAView.as_view()(request)
 
+        # Assert
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         messages = list(topic.messages.order_by("created_at"))
         self.assertEqual(2, len(messages))
@@ -138,17 +147,21 @@ class CodeQAViewTests(TestCase):
         self.assertEqual("stored answer", messages[1].content)
 
     def test_returns_404_when_topic_missing(self) -> None:
+        # Arrange
         request = self.factory.post(
             "/api/code-qa/",
             {"question": "Hello?", "system_prompt": "code expert", "topic_id": 999},
             format="json",
         )
 
+        # Act
         response = CodeQAView.as_view()(request)
 
+        # Assert
         self.assertEqual(status.HTTP_404_NOT_FOUND, response.status_code)
 
     def test_post_returns_503_when_index_missing(self) -> None:
+        # Arrange
         request = self.factory.post(
             "/api/code-qa/",
             {"question": "Hello?", "system_prompt": "code expert"},
@@ -160,30 +173,39 @@ class CodeQAViewTests(TestCase):
             rag_service_module.AnswerNotReadyError("no index")
         )
 
+        # Act
         response = view(request)
 
+        # Assert
         self.assertEqual(status.HTTP_503_SERVICE_UNAVAILABLE, response.status_code)
         self.assertIn("detail", response.data)
 
     def test_requires_custom_prompt_when_needed(self) -> None:
+        # Arrange
         request = self.factory.post(
             "/api/code-qa/",
             {"question": "Hello?", "system_prompt": "custom"},
             format="json",
         )
 
+        # Act
         response = CodeQAView.as_view()(request)
 
+        # Assert
         self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
         self.assertIn("custom_prompt", response.data)
 
 
 class HealthViewTests(SimpleTestCase):
     def test_returns_ok_status(self) -> None:
+        # Arrange
         view = HealthView.as_view()
         request = APIRequestFactory().get("/api/health/")
+
+        # Act
         response = view(request)
 
+        # Assert
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertEqual({"status": "ok"}, response.data)
 
@@ -197,6 +219,7 @@ class BuildRagIndexViewTests(SimpleTestCase):
         self.addCleanup(os.environ.pop, "RAG_DATA_DIR", None)
 
     def test_triggers_build_with_custom_root(self) -> None:
+        # Arrange
         request = self.factory.post(
             "/api/code-qa/build-rag/",
             {"root": "/tmp/project"},
@@ -204,8 +227,10 @@ class BuildRagIndexViewTests(SimpleTestCase):
         )
 
         with patch("codeqa.views.call_command") as mock_call_command:
+            # Act
             response = BuildRagIndexView.as_view()(request)
 
+        # Assert
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         args, kwargs = mock_call_command.call_args
         self.assertEqual("build_rag_index", args[0])
@@ -217,11 +242,14 @@ class BuildRagIndexViewTests(SimpleTestCase):
         self.assertEqual(expected_root, load_last_root())
 
     def test_defaults_root_when_missing(self) -> None:
+        # Arrange
         request = self.factory.post("/api/code-qa/build-rag/", {}, format="json")
 
         with patch("codeqa.views.call_command") as mock_call_command:
+            # Act
             response = BuildRagIndexView.as_view()(request)
 
+        # Assert
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         _args, kwargs = mock_call_command.call_args
         self.assertNotIn("root", kwargs)
@@ -229,29 +257,39 @@ class BuildRagIndexViewTests(SimpleTestCase):
         self.assertEqual(get_default_root(), load_last_root())
 
     def test_returns_error_on_failure(self) -> None:
+        # Arrange
         request = self.factory.post("/api/code-qa/build-rag/", {}, format="json")
 
         with patch("codeqa.views.call_command", side_effect=RuntimeError("boom")):
+            # Act
             response = BuildRagIndexView.as_view()(request)
 
+        # Assert
         self.assertEqual(status.HTTP_500_INTERNAL_SERVER_ERROR, response.status_code)
         self.assertIn("detail", response.data)
 
     def test_get_returns_last_used_root(self) -> None:
+        # Arrange
         stored_root = str(Path(self.tmpdir.name) / "project")
         save_last_root(stored_root)
 
         request = self.factory.get("/api/code-qa/build-rag/")
+
+        # Act
         response = BuildRagIndexView.as_view()(request)
 
+        # Assert
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertEqual(stored_root, response.data["root"])
 
     def test_get_returns_default_when_state_missing(self) -> None:
+        # Arrange
         request = self.factory.get("/api/code-qa/build-rag/")
 
+        # Act
         response = BuildRagIndexView.as_view()(request)
 
+        # Assert
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertEqual(get_default_root(), response.data["root"])
 
@@ -262,21 +300,28 @@ class TopicViewsTests(TestCase):
         Topic.objects.all().delete()
 
     def test_creates_topic(self) -> None:
+        # Arrange
         request = self.factory.post("/api/topics/", {"name": "Release notes"}, format="json")
 
+        # Act
         response = TopicListView.as_view()(request)
 
+        # Assert
         self.assertEqual(status.HTTP_201_CREATED, response.status_code)
         self.assertEqual("Release notes", response.data["name"])
         self.assertEqual([], response.data["messages"])
         self.assertEqual(0, response.data["message_count"])
 
     def test_lists_topics(self) -> None:
+        # Arrange
         Topic.objects.bulk_create([Topic(name="One"), Topic(name="Two"), Topic(name="Three")])
 
         request = self.factory.get("/api/topics/?limit=2&offset=0")
+
+        # Act
         response = TopicListView.as_view()(request)
 
+        # Assert
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertEqual(2, len(response.data["topics"]))
         self.assertEqual(2, response.data["next_offset"])
@@ -288,14 +333,18 @@ class TopicViewsTests(TestCase):
         self.assertTrue(all("message_count" in topic for topic in response.data["topics"]))
 
     def test_returns_detail_with_messages(self) -> None:
+        # Arrange
         topic = Topic.objects.create(name="Docs")
         Message.objects.create(topic=topic, role=Message.ROLE_USER, content="Question?")
         Message.objects.create(topic=topic, role=Message.ROLE_ASSISTANT, content="Answer")
         Message.objects.create(topic=topic, role=Message.ROLE_ASSISTANT, content="Extra")
 
         request = self.factory.get(f"/api/topics/{topic.id}/?limit=2&offset=1")
+
+        # Act
         response = TopicDetailView.as_view()(request, topic_id=topic.id)
 
+        # Assert
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertEqual(2, len(response.data["messages"]))
         self.assertEqual("Docs", response.data["name"])
@@ -304,9 +353,13 @@ class TopicViewsTests(TestCase):
         self.assertEqual("Answer", response.data["messages"][0]["content"])
 
     def test_returns_404_for_missing_topic(self) -> None:
+        # Arrange
         request = self.factory.get("/api/topics/999/")
+
+        # Act
         response = TopicDetailView.as_view()(request, topic_id=999)
 
+        # Assert
         self.assertEqual(status.HTTP_404_NOT_FOUND, response.status_code)
 
 
@@ -316,6 +369,7 @@ class SearchViewTests(TestCase):
         Topic.objects.all().delete()
 
     def test_returns_grouped_results(self) -> None:
+        # Arrange
         alpha = Topic.objects.create(name="Alpha guide")
         beta = Topic.objects.create(name="Beta release")
         Message.objects.bulk_create(
@@ -328,8 +382,11 @@ class SearchViewTests(TestCase):
         )
 
         request = self.factory.get("/api/search/?q=release&limit=5")
+
+        # Act
         response = SearchView.as_view()(request)
 
+        # Assert
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertEqual(1, len(response.data["topics"]["items"]))
         self.assertEqual("Beta release", response.data["topics"]["items"][0]["name"])
@@ -339,6 +396,7 @@ class SearchViewTests(TestCase):
         self.assertIn("migrations", response.data["answers"]["items"][0]["content"])
 
     def test_supports_offsets(self) -> None:
+        # Arrange
         topic = Topic.objects.create(name="Changelog")
         Message.objects.bulk_create(
             [
@@ -348,6 +406,7 @@ class SearchViewTests(TestCase):
             ]
         )
 
+        # Act
         first_page = SearchView.as_view()(self.factory.get("/api/search/?q=question&limit=2"))
         self.assertEqual(2, len(first_page.data["questions"]["items"]))
         self.assertEqual(2, first_page.data["questions"]["next_offset"])
@@ -355,5 +414,7 @@ class SearchViewTests(TestCase):
         second_page = SearchView.as_view()(
             self.factory.get("/api/search/?q=question&limit=2&questions_offset=2")
         )
+
+        # Assert
         self.assertEqual(1, len(second_page.data["questions"]["items"]))
         self.assertIsNone(second_page.data["questions"]["next_offset"])

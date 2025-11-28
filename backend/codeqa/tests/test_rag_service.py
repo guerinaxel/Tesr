@@ -36,42 +36,51 @@ class RagServiceTests(SimpleTestCase):
         self.rag_service = rag_service_module
 
     def test_answer_question_builds_context_and_returns_meta(self) -> None:
+        # Arrange
         class FakeIndex:
             def search(self, query: str, k: int, fusion_weight: float = 0.5):
                 return [(f"snippet for {query}", 0.42)]
 
         self.rag_service._rag_index = FakeIndex()
 
+        # Act
         answer, meta = self.rag_service.answer_question("How?", top_k=3)
 
+        # Assert
         self.assertIn("answer", answer)
         self.assertEqual(1, meta["num_contexts"])
         self.assertEqual(0.42, meta["contexts"][0]["score"])
 
     def test_answer_question_raises_when_no_context(self) -> None:
+        # Arrange
         class EmptyIndex:
             def search(self, query: str, k: int, fusion_weight: float = 0.5):
                 return []
 
         self.rag_service._rag_index = EmptyIndex()
 
+        # Act & Assert
         with self.assertRaises(self.rag_service.AnswerNotReadyError):
             self.rag_service.answer_question("Missing")
 
     def test_document_expert_uses_qwen_model(self) -> None:
+        # Arrange
         class FakeIndex:
             def search(self, query: str, k: int, fusion_weight: float = 0.5):
                 return [(f"snippet for {query}", 0.42)]
 
         self.rag_service._rag_index = FakeIndex()
 
+        # Act
         answer, _meta = self.rag_service.answer_question(
             "Doc?", system_prompt="document expert"
         )
 
+        # Assert
         self.assertIn("qwen2.5vl:7b", answer)
 
     def test_document_expert_falls_back_when_primary_fails(self) -> None:
+        # Arrange
         class FakeIndex:
             def search(self, query: str, k: int, fusion_weight: float = 0.5):
                 return [(f"snippet for {query}", 0.42)]
@@ -90,6 +99,7 @@ class RagServiceTests(SimpleTestCase):
 
         self.rag_service.chat = flaky_chat
 
+        # Act
         try:
             answer, _meta = self.rag_service.answer_question(
                 "Doc?", system_prompt="document expert"
@@ -99,4 +109,5 @@ class RagServiceTests(SimpleTestCase):
             os.environ.pop("OLLAMA_DOC_MODEL_NAME", None)
             os.environ.pop("OLLAMA_DOC_MODEL_FALLBACK", None)
 
+        # Assert
         self.assertIn("fallback-model", answer)

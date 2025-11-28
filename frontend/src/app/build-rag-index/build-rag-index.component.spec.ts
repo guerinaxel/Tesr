@@ -33,16 +33,23 @@ describe('BuildRagIndexComponent', () => {
   });
 
   it('loads the last used root on init', () => {
+    // Arrange & Act handled in setup
+
+    // Assert
     expect(component.root).toBe('/workspace/default');
     expect(component.lastUsedRoot).toBe('/workspace/default');
   });
 
   it('sends the root value to the backend and shows a success toast', () => {
+    // Arrange
     component.root = '/workspace/project';
 
+    // Act
     component.onSubmit();
 
     const req = httpMock.expectOne(`${environment.apiUrl}/code-qa/build-rag/`);
+    
+    // Assert
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({ root: '/workspace/project' });
 
@@ -56,12 +63,15 @@ describe('BuildRagIndexComponent', () => {
   });
 
   it('shows an error toast when the request fails', () => {
+    // Arrange
     component.root = '';
 
+    // Act
     component.onSubmit();
     const req = httpMock.expectOne(`${environment.apiUrl}/code-qa/build-rag/`);
     req.flush({ detail: 'Command failed' }, { status: 500, statusText: 'Error' });
 
+    // Assert
     expect(component.toast).toEqual(
       jasmine.objectContaining({ type: 'error', message: 'Command failed' })
     );
@@ -69,12 +79,16 @@ describe('BuildRagIndexComponent', () => {
   });
 
   it('keeps the submit button in loading state until the call resolves', () => {
+    // Arrange
     component.root = '/tmp';
 
+    // Act
     component.onSubmit();
     component.onSubmit();
 
     const requests = httpMock.match(`${environment.apiUrl}/code-qa/build-rag/`);
+    
+    // Assert
     expect(requests.length).toBe(1);
     expect(component.isSubmitting).toBeTrue();
 
@@ -83,10 +97,15 @@ describe('BuildRagIndexComponent', () => {
   });
 
   it('rebuilds using the last known root value', () => {
+    // Arrange
     component.lastUsedRoot = '/stored/root';
+
+    // Act
     component.onRebuild();
 
     const request = httpMock.expectOne(`${environment.apiUrl}/code-qa/build-rag/`);
+    
+    // Assert
     expect(request.request.body).toEqual({ root: '/stored/root' });
     request.flush({ detail: 'ok', root: '/stored/root' });
 

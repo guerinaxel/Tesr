@@ -18,6 +18,7 @@ const topicsPanel = new TopicsPanel();
 
 describe('AI Code Assistant app', () => {
   it('sends a chat message and renders assistant reply', () => {
+    // Arrange
     stubTopicList([{ id: 1, name: 'Sprint 12', message_count: 0 }]);
     stubTopicDetail({ id: 1, name: 'Sprint 12', message_count: 0, messages: [] });
     stubSendQuestion(
@@ -29,11 +30,13 @@ describe('AI Code Assistant app', () => {
       { answer: 'Voici une réponse utile.' }
     );
 
+    // Act
     chatPage.visit();
     topicsPanel.waitForTopicList().waitForTopicDetail();
 
     chatPage.typeQuestion('Bonjour, aide-moi !').clickSend();
 
+    // Assert
     chatPage.expectSendDisabled();
     cy.wait('@sendQuestion');
 
@@ -45,6 +48,7 @@ describe('AI Code Assistant app', () => {
   });
 
   it('allows selecting a custom system prompt and sends it to the API', () => {
+    // Arrange
     stubTopicList([{ id: 2, name: 'Docs', message_count: 0 }]);
     stubTopicDetail({ id: 2, name: 'Docs', message_count: 0, messages: [] });
     stubSendQuestion(
@@ -58,6 +62,7 @@ describe('AI Code Assistant app', () => {
       'sendCustom'
     );
 
+    // Act
     chatPage.visit();
     topicsPanel.waitForTopicList().waitForTopicDetail();
 
@@ -67,11 +72,13 @@ describe('AI Code Assistant app', () => {
       .typeQuestion('Salut, explique-moi ceci.')
       .clickSend();
 
+    // Assert
     cy.wait('@sendCustom');
     chatPage.expectAssistantMessageContains('Réponse sur mesure.');
   });
 
   it('creates a new topic and shows its empty conversation state', () => {
+    // Arrange
     let listCall = 0;
     cy.intercept('GET', 'http://localhost:8000/api/topics/**', (req) => {
       listCall += 1;
@@ -85,11 +92,13 @@ describe('AI Code Assistant app', () => {
     stubCreateTopic({ id: 3, name: 'New thread', message_count: 0, messages: [] });
     stubTopicDetail({ id: 3, name: 'New thread', message_count: 0, messages: [] });
 
+    // Act
     chatPage.visit();
     topicsPanel.waitForTopicList();
 
     topicsPanel.createTopic('New thread');
 
+    // Assert
     cy.wait('@createTopic');
     topicsPanel.waitForTopicDetail().waitForTopicList();
 
@@ -98,6 +107,7 @@ describe('AI Code Assistant app', () => {
   });
 
   it('lists multiple topics and loads their histories when switching', () => {
+    // Arrange
     stubTopicList([
       { id: 2, name: 'Bugfix', message_count: 1 },
       { id: 1, name: 'Sprint 12', message_count: 2 },
@@ -127,10 +137,12 @@ describe('AI Code Assistant app', () => {
       'sprintDetail'
     );
 
+    // Act
     chatPage.visit();
     topicsPanel.waitForTopicList();
     topicsPanel.waitForTopicDetail('bugfixDetail');
 
+    // Assert
     topicsPanel.expectTopicExists('Sprint 12').expectTopicExists('Bugfix');
     chatPage.expectAssistantMessageContains('Please try restarting');
 
@@ -140,10 +152,12 @@ describe('AI Code Assistant app', () => {
   });
 
   it('navigates to the Build RAG page and triggers an index build', () => {
+    // Arrange
     stubTopicList([]);
     stubLastRagRoot('/workspace/latest');
     stubBuildRag();
 
+    // Act
     chatPage.visit();
     chatPage.clickBuildRagNav();
 
@@ -157,10 +171,13 @@ describe('AI Code Assistant app', () => {
     buildRagPage.typeRootPath('/workspace/project').launchBuild();
 
     cy.wait('@buildRag').its('request.body').should('deep.equal', { root: '/workspace/project' });
+
+    // Assert
     buildRagPage.expectToastMessage('RAG index build triggered.');
   });
 
   it('opens the topic search overlay and switches to a matched topic', () => {
+    // Arrange
     stubTopicList([
       { id: 1, name: 'Sprint 12', message_count: 1 },
       { id: 2, name: 'Release planning', message_count: 2 },
@@ -197,6 +214,7 @@ describe('AI Code Assistant app', () => {
       'topicSearch'
     );
 
+    // Act
     chatPage.visit();
     topicsPanel.waitForTopicList().waitForTopicDetail();
 
@@ -213,12 +231,14 @@ describe('AI Code Assistant app', () => {
       chatComponent.topicSearchLoading.set(false);
     });
 
+    // Assert
     topicsPanel.expectTopicSearchResult('Release planning').selectTopicFromSearch('Release planning');
     topicsPanel.waitForTopicDetail('releaseDetail');
     chatPage.expectAssistantMessageContains('Launch readiness confirmed');
   });
 
   it('shows grouped global search results and loads more entries per category', () => {
+    // Arrange
     stubTopicList([{ id: 5, name: 'Docs', message_count: 3 }]);
     stubTopicDetail(
       {
@@ -302,6 +322,7 @@ describe('AI Code Assistant app', () => {
       'globalSearchAnswersMore'
     );
 
+    // Act
     chatPage.visit();
     topicsPanel.waitForTopicList().waitForTopicDetail();
 
@@ -338,6 +359,7 @@ describe('AI Code Assistant app', () => {
       appComponent.globalSearchLoading.set(false);
     });
 
+    // Assert
     globalSearch
       .expectResultInGroup('topics', 'Docs guide')
       .expectResultInGroup('questions', 'How to improve docs?')
@@ -345,6 +367,7 @@ describe('AI Code Assistant app', () => {
       .expectMoreButton('topics')
       .expectMoreButton('answers');
 
+    // Act
     globalSearch.clickMore('topics');
     cy.wait(50);
 
@@ -371,6 +394,7 @@ describe('AI Code Assistant app', () => {
     });
     globalSearch.expectResultInGroup('topics', 'Docs QA').expectMoreButton('topics', false);
 
+    // Act
     globalSearch.clickMore('answers');
     cy.wait(50);
 
@@ -395,6 +419,8 @@ describe('AI Code Assistant app', () => {
         },
       });
     });
+
+    // Assert
     globalSearch.expectResultInGroup('answers', 'Automate doc deploys').expectMoreButton('answers', false);
   });
 });
