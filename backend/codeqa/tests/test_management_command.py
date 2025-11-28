@@ -26,16 +26,20 @@ class BuildRagIndexCommandTests(SimpleTestCase):
         self.addCleanup(os.environ.pop, "RAG_DOCS_PATH", None)
 
     def test_aborts_when_no_chunks_found(self) -> None:
+        # Arrange
         def fake_collect_code_chunks(root: Path) -> List[str]:
             return []
 
         build_rag_index.collect_code_chunks = fake_collect_code_chunks  # type: ignore[assignment]
 
+        # Act
         call_command("build_rag_index", stdout=self.stdout, stderr=self.stderr)
 
+        # Assert
         self.assertIn("No code chunks found", self.stderr.getvalue())
 
     def test_skips_when_index_exists_without_force(self) -> None:
+        # Arrange
         existing_index = Path(os.environ["RAG_INDEX_PATH"])
         existing_index.parent.mkdir(parents=True, exist_ok=True)
         existing_index.write_text("existing")
@@ -53,11 +57,14 @@ class BuildRagIndexCommandTests(SimpleTestCase):
         build_rag_index.collect_code_chunks = fake_collect_code_chunks  # type: ignore[assignment]
         build_rag_index.RagIndex = FakeRagIndex  # type: ignore[assignment]
 
+        # Act
         call_command("build_rag_index", stdout=self.stdout, stderr=self.stderr)
 
+        # Assert
         self.assertIn("Index already exists", self.stderr.getvalue())
 
     def test_builds_index_when_force_flag_used(self) -> None:
+        # Arrange
         created_docs: List[str] = []
 
         def fake_collect_code_chunks(root: Path) -> List[str]:
@@ -73,7 +80,9 @@ class BuildRagIndexCommandTests(SimpleTestCase):
         build_rag_index.collect_code_chunks = fake_collect_code_chunks  # type: ignore[assignment]
         build_rag_index.RagIndex = FakeRagIndex  # type: ignore[assignment]
 
+        # Act
         call_command("build_rag_index", "--force", stdout=self.stdout, stderr=self.stderr)
 
+        # Assert
         self.assertEqual(["doc1", "doc2"], created_docs)
         self.assertIn("RAG index built successfully", self.stdout.getvalue())

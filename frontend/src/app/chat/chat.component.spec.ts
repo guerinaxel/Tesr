@@ -41,6 +41,7 @@ describe('ChatComponent', () => {
   });
 
   it('sends a question to the backend and appends the assistant answer', fakeAsync(() => {
+    // Arrange
     component.question.set('Explain RAG');
 
     chatDataService.sendQuestion.and.returnValue(of({ answer: 'Contextual explanation' }));
@@ -48,8 +49,10 @@ describe('ChatComponent', () => {
       of({ id: 1, name: 'Default', message_count: 2, messages: [], next_offset: null })
     );
 
+    // Act
     component.onSubmit();
 
+    // Assert
     expect(chatDataService.sendQuestion).toHaveBeenCalledWith({
       question: 'Explain RAG',
       system_prompt: 'code expert',
@@ -68,15 +71,19 @@ describe('ChatComponent', () => {
   }));
 
   it('ignores submits while already sending', () => {
+    // Arrange
     component.question.set('Already sending');
     component.isSending.set(true);
 
+    // Act
     component.onSubmit();
 
+    // Assert
     expect(chatDataService.sendQuestion).not.toHaveBeenCalled();
   });
 
   it('sends a custom prompt when selected', () => {
+    // Arrange
     component.question.set('Customise the system');
     component.systemPrompt.set('custom');
     component.customPrompt.set('You are concise');
@@ -86,8 +93,10 @@ describe('ChatComponent', () => {
       of({ id: 1, name: 'Default', message_count: 2, messages: [], next_offset: null })
     );
 
+    // Act
     component.onSubmit();
 
+    // Assert
     expect(chatDataService.sendQuestion).toHaveBeenCalledWith({
       question: 'Customise the system',
       system_prompt: 'custom',
@@ -97,6 +106,7 @@ describe('ChatComponent', () => {
   });
 
   it('sends the message when pressing ctrl+space with content', () => {
+    // Arrange
     component.question.set('Quick send');
 
     chatDataService.sendQuestion.and.returnValue(of({ answer: 'Delivered' }));
@@ -104,10 +114,12 @@ describe('ChatComponent', () => {
       of({ id: 1, name: 'Default', message_count: 2, messages: [], next_offset: null })
     );
 
+    // Act
     component.onSpaceSend(
       new KeyboardEvent('keydown', { key: ' ', ctrlKey: true })
     );
 
+    // Assert
     expect(chatDataService.sendQuestion).toHaveBeenCalledWith({
       question: 'Quick send',
       system_prompt: 'code expert',
@@ -123,56 +135,71 @@ describe('ChatComponent', () => {
   });
 
   it('does not send the message when pressing space without modifiers', () => {
+    // Arrange
     component.question.set('Should stay');
 
+    // Act
     component.onSpaceSend(new KeyboardEvent('keydown', { key: ' ' }));
 
+    // Assert
     expect(chatDataService.sendQuestion).not.toHaveBeenCalled();
     expect(component.messages().length).toBe(0);
     expect(component.isSending()).toBeFalse();
   });
 
   it('does not send on keyboard shortcut when the message is empty', () => {
+    // Arrange
     component.question.set('   ');
 
+    // Act
     component.onSpaceSend(
       new KeyboardEvent('keydown', { key: ' ', ctrlKey: true })
     );
 
+    // Assert
     expect(chatDataService.sendQuestion).not.toHaveBeenCalled();
   });
 
   it('does not send when custom prompt is missing', () => {
+    // Arrange
     component.question.set('Should block');
     component.systemPrompt.set('custom');
     component.customPrompt.set('   ');
 
+    // Act
     component.onSubmit();
 
+    // Assert
     expect(chatDataService.sendQuestion).not.toHaveBeenCalled();
     expect(component.messages().length).toBe(0);
     expect(component.isSending()).toBeFalse();
   });
 
   it('does not send a request for blank input', () => {
+    // Arrange
     component.question.set('   ');
 
+    // Act
     component.onSubmit();
 
+    // Assert
     expect(chatDataService.sendQuestion).not.toHaveBeenCalled();
     expect(component.messages().length).toBe(0);
     expect(component.isSending()).toBeFalse();
   });
 
   it('shows an error message when the API call fails', fakeAsync(() => {
+    // Arrange
     component.question.set('Trigger error');
 
     chatDataService.sendQuestion.and.returnValue(
       throwError(() => ({ error: { detail: 'Service unavailable' } }))
     );
 
+    // Act
     component.onSubmit();
 
+    // Assert
     const errorMessage = component.messages()[component.messages().length - 1];
     expect(errorMessage?.isError).toBeTrue();
     expect(errorMessage?.content).toContain('Service unavailable');
@@ -181,6 +208,7 @@ describe('ChatComponent', () => {
   }));
 
   it('creates a new topic and loads it', () => {
+    // Arrange
     component.newTopicName.set('Feature A');
 
     chatDataService.createTopic.and.returnValue(
@@ -199,8 +227,10 @@ describe('ChatComponent', () => {
       })
     );
 
+    // Act
     component.createTopic();
 
+    // Assert
     expect(chatDataService.createTopic).toHaveBeenCalledWith('Feature A');
 
     expect(component.topics().length).toBe(2);
@@ -209,24 +239,31 @@ describe('ChatComponent', () => {
   });
 
   it('ignores topic creation when name is blank', () => {
+    // Arrange
     component.newTopicName.set('   ');
 
+    // Act
     component.createTopic();
 
+    // Assert
     expect(chatDataService.createTopic).not.toHaveBeenCalled();
   });
 
   it('refreshes topic metadata and ignores null topic ids', () => {
+    // Arrange
     const getTopicDetailSpy = chatDataService.getTopicDetail.and.returnValue(
       of({ id: 1, name: 'Updated', message_count: 5, messages: [], next_offset: null })
     );
 
     component.topics.set([{ id: 1, name: 'Default', message_count: 1 }]);
+
+    // Act
     component['refreshTopicMetadata'](null);
     expect(getTopicDetailSpy).not.toHaveBeenCalled();
 
     component['refreshTopicMetadata'](1);
 
+    // Assert
     expect(getTopicDetailSpy).toHaveBeenCalledWith(1, { limit: 0 });
     expect(component.topics()[0]).toEqual(
       jasmine.objectContaining({ name: 'Updated', message_count: 5 })
@@ -234,6 +271,7 @@ describe('ChatComponent', () => {
   });
 
   it('loads topics from the API and selects the most recent when none is chosen', () => {
+    // Arrange
     component.selectedTopicId.set(null);
     component.topics.set([]);
 
@@ -259,8 +297,10 @@ describe('ChatComponent', () => {
       })
     );
 
+    // Act
     component.loadTopics(null, true);
 
+    // Assert
     expect(component.selectedTopicId()).toBe(6);
     expect(component.messages().length).toBe(2);
     expect(component.messages()[0]).toEqual(
@@ -274,6 +314,7 @@ describe('ChatComponent', () => {
   });
 
   it('selects a requested topic when provided', () => {
+    // Arrange
     chatDataService.getTopics.and.returnValue(
       of({
         topics: [{ id: 3, name: 'Requested', message_count: 1 }],
@@ -290,8 +331,10 @@ describe('ChatComponent', () => {
       })
     );
 
+    // Act
     component.loadTopics(3);
 
+    // Assert
     expect(component.selectedTopicId()).toBe(3);
     expect(chatDataService.getTopicDetail).toHaveBeenCalledWith(3, {
       offset: 0,
@@ -300,6 +343,7 @@ describe('ChatComponent', () => {
   });
 
   it('allows switching to another topic and loads its history', () => {
+    // Arrange
     component.topics.set([
       { id: 1, name: 'Default', message_count: 0 },
       { id: 2, name: 'Follow-up', message_count: 2 },
@@ -319,8 +363,10 @@ describe('ChatComponent', () => {
       })
     );
 
+    // Act
     component.selectTopic(2);
 
+    // Assert
     expect(component.selectedTopicId()).toBe(2);
     expect(component.messages()[1]).toEqual(
       jasmine.objectContaining({ from: 'assistant', content: 'Answer' })
@@ -328,22 +374,28 @@ describe('ChatComponent', () => {
   });
 
   it('does not reload the same topic unless forced', () => {
+    // Arrange
     component.topics.set([
       { id: 1, name: 'Default', message_count: 0 },
       { id: 2, name: 'Follow-up', message_count: 2 },
     ]);
 
     component.selectedTopicId.set(2);
+
+    // Act
     component.selectTopic(2);
 
+    // Assert
     expect(chatDataService.getTopicDetail).not.toHaveBeenCalled();
 
     chatDataService.getTopicDetail.and.returnValue(
       of({ id: 2, name: 'Follow-up', message_count: 2, messages: [], next_offset: null })
     );
 
+    // Act
     component.selectTopic(2, true);
 
+    // Assert
     expect(chatDataService.getTopicDetail).toHaveBeenCalledWith(2, {
       offset: 0,
       limit: 30,
@@ -351,6 +403,7 @@ describe('ChatComponent', () => {
   });
 
   it('clears messages when topic detail fails to load', () => {
+    // Arrange
     component.selectedTopicId.set(1);
     component.messages.set([
       { id: 1, from: 'user', content: 'Question' },
@@ -361,35 +414,44 @@ describe('ChatComponent', () => {
       throwError(() => new Error('Nope'))
     );
 
+    // Act
     component.selectTopic(1, true);
 
+    // Assert
     expect(component.messages().length).toBe(0);
   });
 
   it('sends on ctrl+space or meta+space but not while sending', () => {
+    // Arrange
     component.question.set('Meta send');
     chatDataService.sendQuestion.and.returnValue(of({ answer: 'done' }));
     chatDataService.getTopicDetail.and.returnValue(
       of({ id: 1, name: 'Default', message_count: 0, messages: [], next_offset: null })
     );
 
+    // Act
     component.onSpaceSend(
       new KeyboardEvent('keydown', { key: ' ', metaKey: true })
     );
 
+    // Assert
     expect(chatDataService.sendQuestion).toHaveBeenCalledTimes(1);
 
+    // Arrange
     component.isSending.set(true);
     component.question.set('Blocked');
 
+    // Act
     component.onSpaceSend(
       new KeyboardEvent('keydown', { key: ' ', ctrlKey: true })
     );
 
+    // Assert
     expect(chatDataService.sendQuestion).toHaveBeenCalledTimes(1);
   });
 
   it('loads more topics when the viewport nears the end', () => {
+    // Arrange
     chatDataService.getTopics.and.returnValue(
       of({ topics: [{ id: 1, name: 'Default', message_count: 0 }], next_offset: 20 })
     );
@@ -400,8 +462,10 @@ describe('ChatComponent', () => {
       of({ topics: [{ id: 2, name: 'Next', message_count: 1 }], next_offset: null })
     );
 
+    // Act
     component.onTopicsScrolled(component.topics().length - 1);
 
+    // Assert
     expect(chatDataService.getTopics).toHaveBeenCalledWith({
       offset: 20,
       limit: 20,
@@ -410,6 +474,7 @@ describe('ChatComponent', () => {
   });
 
   it('loads additional messages when scrolling the conversation', () => {
+    // Arrange
     chatDataService.getTopicDetail.and.returnValue(
       of({
         id: 1,
@@ -423,6 +488,7 @@ describe('ChatComponent', () => {
       })
     );
 
+    // Act
     component.selectTopic(1, true);
     chatDataService.getTopicDetail.calls.reset();
 
@@ -436,8 +502,10 @@ describe('ChatComponent', () => {
       })
     );
 
+    // Act
     component.onMessagesScrolled(component.messages().length - 1);
 
+    // Assert
     expect(chatDataService.getTopicDetail).toHaveBeenCalledWith(1, {
       offset: 2,
       limit: 30,
@@ -446,6 +514,7 @@ describe('ChatComponent', () => {
   });
 
   it('handles topic load failures gracefully', () => {
+    // Arrange
     component.topics.set([
       { id: 1, name: 'Default', message_count: 0 },
       { id: 2, name: 'Follow-up', message_count: 2 },
@@ -453,29 +522,38 @@ describe('ChatComponent', () => {
 
     chatDataService.getTopics.and.returnValue(throwError(() => new Error('fail')));
 
+    // Act
     component.loadTopics();
 
+    // Assert
     expect(component.topics().length).toBe(0);
     expect(component.selectedTopicId()).toBeNull();
     expect(component.messages().length).toBe(0);
   });
 
   it('does not request topics while loading or when no more pages exist', () => {
+    // Arrange
     (component as any).topicsLoading = true;
 
+    // Act
     component.loadTopics();
 
+    // Assert
     expect(chatDataService.getTopics).not.toHaveBeenCalled();
 
+    // Arrange
     (component as any).topicsLoading = false;
     (component as any).hasMoreTopics = false;
 
+    // Act
     component.loadTopics();
 
+    // Assert
     expect(chatDataService.getTopics).not.toHaveBeenCalled();
   });
 
   it('clears selection when topic list is empty', () => {
+    // Arrange
     component.selectedTopicId.set(1);
     component.messages.set([
       { id: 1, from: 'user', content: 'Question' },
@@ -484,37 +562,49 @@ describe('ChatComponent', () => {
 
     chatDataService.getTopics.and.returnValue(of({ topics: [], next_offset: null }));
 
+    // Act
     component.loadTopics(null, true);
 
+    // Assert
     expect(component.topics()).toEqual([]);
     expect(component.selectedTopicId()).toBeNull();
     expect(component.messages().length).toBe(0);
   });
 
   it('does not load messages while fetching or when no next page is available', () => {
+    // Arrange
     (component as any).messagesLoading = true;
 
+    // Act
     (component as any).loadMessages(1);
 
+    // Assert
     expect(chatDataService.getTopicDetail).not.toHaveBeenCalled();
 
+    // Arrange
     (component as any).messagesLoading = false;
     (component as any).hasMoreMessages = false;
 
+    // Act
     (component as any).loadMessages(1);
 
+    // Assert
     expect(chatDataService.getTopicDetail).not.toHaveBeenCalled();
   });
 
   it('ignores message scrolls when no topic is selected', () => {
+    // Arrange
     component.selectedTopicId.set(null);
 
+    // Act
     component.onMessagesScrolled(10);
 
+    // Assert
     expect(chatDataService.getTopicDetail).not.toHaveBeenCalled();
   });
 
   it('debounces topic search input and captures results', fakeAsync(() => {
+    // Arrange
     chatDataService.searchEverything.and.returnValue(
       of({
         topics: { items: [{ id: 7, name: 'Match', message_count: 1 }], next_offset: null },
@@ -523,6 +613,7 @@ describe('ChatComponent', () => {
       })
     );
 
+    // Act
     component.onTopicSearchChange('  search  ');
 
     tick(400);
@@ -530,6 +621,7 @@ describe('ChatComponent', () => {
 
     tick(100);
 
+    // Assert
     expect(chatDataService.searchEverything).toHaveBeenCalledWith('search', { limit: 5 });
     expect(component.topicSearchLoading()).toBeFalse();
     expect(component.topicSearchResults()[0]).toEqual(
@@ -538,34 +630,42 @@ describe('ChatComponent', () => {
   }));
 
   it('clears topic search results for empty input', fakeAsync(() => {
+    // Arrange
     component.topicSearchResults.set([{ id: 1, name: 'Keep', message_count: 1 }]);
     component.topicSearchLoading.set(true);
 
+    // Act
     component.onTopicSearchChange('   ');
 
     tick(600);
 
+    // Assert
     expect(chatDataService.searchEverything).not.toHaveBeenCalled();
     expect(component.topicSearchResults()).toEqual([]);
     expect(component.topicSearchLoading()).toBeFalse();
   }));
 
   it('resets topic search state when the API errors', fakeAsync(() => {
+    // Arrange
     chatDataService.searchEverything.and.returnValue(
       throwError(() => new Error('fail'))
     );
 
+    // Act
     component.onTopicSearchChange('oops');
     tick(500);
 
+    // Assert
     expect(component.topicSearchResults()).toEqual([]);
     expect(component.topicSearchLoading()).toBeFalse();
   }));
 
   it('opens and closes the topic search overlay and tracks list entries', fakeAsync(() => {
+    // Arrange
     component.topicSearchResults.set([{ id: 4, name: 'Focus', message_count: 0 }]);
     component.topicSearchQuery.set('Focus');
 
+    // Act
     component.openTopicSearch();
     expect(component.isTopicSearchVisible()).toBeTrue();
 
@@ -573,6 +673,7 @@ describe('ChatComponent', () => {
 
     component.closeTopicSearch();
 
+    // Assert
     expect(component.isTopicSearchVisible()).toBeFalse();
     expect(component.topicSearchQuery()).toBe('');
     expect(component.topicSearchResults()).toEqual([]);

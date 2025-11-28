@@ -94,6 +94,7 @@ class RagIndexWithFakes(SimpleTestCase):
     def test_build_from_texts_persists_embeddings_and_docs(self) -> None:
         from codeqa.rag_index import RagConfig, RagIndex
 
+        # Arrange
         with TemporaryDirectory() as tmp:
             config = RagConfig(
                 index_path=Path(tmp) / "idx.faiss",
@@ -102,8 +103,11 @@ class RagIndexWithFakes(SimpleTestCase):
                 fallback_embedding_model_name="local-fallback",
             )
             rag_index = RagIndex(config)
+
+            # Act
             rag_index.build_from_texts(["alpha", "beta"])
 
+            # Assert
             written_index, saved_path = self.fake_storage["written"]
             self.assertIsInstance(written_index, FakeIndexFlatIP)
             self.assertEqual(str(config.index_path), saved_path)
@@ -121,6 +125,7 @@ class RagIndexWithFakes(SimpleTestCase):
     def test_load_reads_index_and_documents(self) -> None:
         from codeqa.rag_index import RagConfig, RagIndex
 
+        # Arrange
         with TemporaryDirectory() as tmp:
             index_path = Path(tmp) / "idx.faiss"
             docs_path = Path(tmp) / "docs.pkl"
@@ -143,8 +148,10 @@ class RagIndexWithFakes(SimpleTestCase):
             )
             rag_index = RagIndex(config)
 
+            # Act
             rag_index.load()
 
+            # Assert
             self.assertIsInstance(rag_index._index, FakeIndexFlatIP)
             self.assertEqual(["doc1", "doc2"], rag_index._docs)
             self.assertEqual([["doc1"], ["doc2"]], rag_index._tokenized_docs)
@@ -153,6 +160,7 @@ class RagIndexWithFakes(SimpleTestCase):
     def test_search_returns_scored_results(self) -> None:
         from codeqa.rag_index import RagConfig, RagIndex
 
+        # Arrange
         rag_index = RagIndex(
             RagConfig(
                 index_path=Path("idx"),
@@ -166,8 +174,10 @@ class RagIndexWithFakes(SimpleTestCase):
         rag_index._tokenized_docs = [["first", "doc"], ["second", "doc"]]
         rag_index._keyword_index = FakeKeywordIndex([(1, 1.0), (0, 0.2)])
 
+        # Act
         results = rag_index.search("What is inside?", k=2, fusion_weight=0.2)
 
+        # Assert
         self.assertEqual(2, len(results))
         self.assertEqual("second doc", results[0][0])
         self.assertGreater(results[0][1], results[1][1])
@@ -176,6 +186,7 @@ class RagIndexWithFakes(SimpleTestCase):
     def test_falls_back_to_secondary_model_on_load_error(self) -> None:
         from codeqa import rag_index as rag_index_module
 
+        # Arrange
         calls: list[str] = []
 
         class FlakyModel(FakeModel):
@@ -187,6 +198,7 @@ class RagIndexWithFakes(SimpleTestCase):
 
         rag_index_module.SentenceTransformer = FlakyModel  # type: ignore[attr-defined]
 
+        # Act
         rag_index_module.RagIndex(
             rag_index_module.RagConfig(
                 index_path=Path("idx"),
@@ -196,6 +208,7 @@ class RagIndexWithFakes(SimpleTestCase):
             )
         )
 
+        # Assert
         self.assertEqual(["primary-model", "fallback-model"], calls)
 
     def test_nomic_model_sets_trust_remote_code_by_default(self) -> None:
