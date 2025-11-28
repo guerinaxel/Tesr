@@ -1,15 +1,18 @@
 import { BuildRagPage } from '../support/pageObjects/BuildRagPage';
 import { ChatPage } from '../support/pageObjects/ChatPage';
+import { GlobalSearch } from '../support/pageObjects/GlobalSearch';
 import { TopicsPanel } from '../support/pageObjects/TopicsPanel';
 import {
   stubBuildRag,
   stubCreateTopic,
+  stubSearch,
   stubSendQuestion,
   stubTopicDetail,
   stubTopicList,
 } from '../support/utils/apiStubs';
 
 const chatPage = new ChatPage();
+const globalSearch = new GlobalSearch();
 const topicsPanel = new TopicsPanel();
 
 describe('AI Code Assistant app', () => {
@@ -148,5 +151,243 @@ describe('AI Code Assistant app', () => {
 
     cy.wait('@buildRag').its('request.body').should('deep.equal', { root: '/workspace/project' });
     buildRagPage.expectToastMessage('RAG index build triggered.');
+  });
+
+  it('opens the topic search overlay and switches to a matched topic', () => {
+    stubTopicList([
+      { id: 1, name: 'Sprint 12', message_count: 1 },
+      { id: 2, name: 'Release planning', message_count: 2 },
+    ]);
+    stubTopicDetail(
+      {
+        id: 1,
+        name: 'Sprint 12',
+        message_count: 1,
+        messages: [{ role: 'assistant', content: 'Sprint backlog ready' }],
+      },
+      'topicDetail'
+    );
+    stubTopicDetail(
+      {
+        id: 2,
+        name: 'Release planning',
+        message_count: 2,
+        messages: [
+          { role: 'assistant', content: 'Release notes drafted' },
+          { role: 'assistant', content: 'Launch readiness confirmed' },
+        ],
+      },
+      'releaseDetail'
+    );
+
+    stubSearch(
+      { q: 'Release', limit: '5' },
+      {
+        topics: { items: [{ id: 2, name: 'Release planning', message_count: 2 }], next_offset: null },
+        questions: { items: [], next_offset: null },
+        answers: { items: [], next_offset: null },
+      },
+      'topicSearch'
+    );
+
+    chatPage.visit();
+    topicsPanel.waitForTopicList().waitForTopicDetail();
+
+    topicsPanel.openTopicSearch();
+    topicsPanel.typeTopicSearch('Release');
+    cy.wait(600);
+
+    cy.window().then((win) => {
+      const chatComponent = (win as any).chatComponent;
+
+      chatComponent.topicSearchResults.set([
+        { id: 2, name: 'Release planning', message_count: 2 },
+      ]);
+      chatComponent.topicSearchLoading.set(false);
+    });
+
+    topicsPanel.expectTopicSearchResult('Release planning').selectTopicFromSearch('Release planning');
+    topicsPanel.waitForTopicDetail('releaseDetail');
+    chatPage.expectAssistantMessageContains('Launch readiness confirmed');
+  });
+
+  it('shows grouped global search results and loads more entries per category', () => {
+    stubTopicList([{ id: 5, name: 'Docs', message_count: 3 }]);
+    stubTopicDetail(
+      {
+        id: 5,
+        name: 'Docs',
+        message_count: 3,
+        messages: [{ role: 'assistant', content: 'Documentation tips' }],
+      },
+      'topicDetail'
+    );
+
+    stubSearch(
+      { q: 'doc', limit: '5', topics_offset: '0', questions_offset: '0', answers_offset: '0' },
+      {
+        topics: {
+          items: [
+            { id: 11, name: 'Docs guide', message_count: 5 },
+            { id: 12, name: 'Docstring tips', message_count: 2 },
+          ],
+          next_offset: 5,
+        },
+        questions: {
+          items: [
+            { id: 101, topic_id: 5, topic_name: 'Docs', content: 'How to improve docs?' },
+            { id: 102, topic_id: 5, topic_name: 'Docs', content: 'Where to host docs?' },
+          ],
+          next_offset: null,
+        },
+        answers: {
+          items: [
+            { id: 201, topic_id: 6, topic_name: 'API', content: 'Use OpenAPI for docs' },
+            { id: 202, topic_id: 7, topic_name: 'Guides', content: 'Include screenshots' },
+          ],
+          next_offset: 5,
+        },
+      },
+      'globalSearchInitial'
+    );
+
+    stubSearch(
+      { q: 'doc', limit: '5', topics_offset: '5', questions_offset: '0', answers_offset: '0' },
+      {
+        topics: {
+          items: [
+            { id: 13, name: 'Docs QA', message_count: 1 },
+            { id: 14, name: 'Docs polish', message_count: 4 },
+          ],
+          next_offset: null,
+        },
+        questions: { items: [], next_offset: null },
+        answers: {
+          items: [
+            { id: 201, topic_id: 6, topic_name: 'API', content: 'Use OpenAPI for docs' },
+            { id: 202, topic_id: 7, topic_name: 'Guides', content: 'Include screenshots' },
+          ],
+          next_offset: 5,
+        },
+      },
+      'globalSearchTopicsMore'
+    );
+
+    stubSearch(
+      { q: 'doc', limit: '5', topics_offset: '5', questions_offset: '0', answers_offset: '5' },
+      {
+        topics: {
+          items: [
+            { id: 13, name: 'Docs QA', message_count: 1 },
+            { id: 14, name: 'Docs polish', message_count: 4 },
+          ],
+          next_offset: null,
+        },
+        questions: { items: [], next_offset: null },
+        answers: {
+          items: [
+            { id: 203, topic_id: 8, topic_name: 'Wiki', content: 'Add onboarding guide' },
+            { id: 204, topic_id: 9, topic_name: 'Docs CI', content: 'Automate doc deploys' },
+          ],
+          next_offset: null,
+        },
+      },
+      'globalSearchAnswersMore'
+    );
+
+    chatPage.visit();
+    topicsPanel.waitForTopicList().waitForTopicDetail();
+
+    globalSearch.typeQuery('doc');
+    cy.wait(600);
+
+    cy.window().then((win) => {
+      const appComponent = (win as any).appComponent;
+
+      appComponent.searchVisible.set(true);
+      appComponent.globalSearchResults.set({
+        topics: {
+          items: [
+            { id: 11, name: 'Docs guide', message_count: 5 },
+            { id: 12, name: 'Docstring tips', message_count: 2 },
+          ],
+          next_offset: 5,
+        },
+        questions: {
+          items: [
+            { id: 101, topic_id: 5, topic_name: 'Docs', content: 'How to improve docs?' },
+            { id: 102, topic_id: 5, topic_name: 'Docs', content: 'Where to host docs?' },
+          ],
+          next_offset: null,
+        },
+        answers: {
+          items: [
+            { id: 201, topic_id: 6, topic_name: 'API', content: 'Use OpenAPI for docs' },
+            { id: 202, topic_id: 7, topic_name: 'Guides', content: 'Include screenshots' },
+          ],
+          next_offset: 5,
+        },
+      });
+      appComponent.globalSearchLoading.set(false);
+    });
+
+    globalSearch
+      .expectResultInGroup('topics', 'Docs guide')
+      .expectResultInGroup('questions', 'How to improve docs?')
+      .expectResultInGroup('answers', 'Use OpenAPI for docs')
+      .expectMoreButton('topics')
+      .expectMoreButton('answers');
+
+    globalSearch.clickMore('topics');
+    cy.wait(50);
+
+    cy.window().then((win) => {
+      const appComponent = (win as any).appComponent;
+
+      appComponent.globalSearchResults.set({
+        topics: {
+          items: [
+            { id: 13, name: 'Docs QA', message_count: 1 },
+            { id: 14, name: 'Docs polish', message_count: 4 },
+          ],
+          next_offset: null,
+        },
+        questions: { items: [], next_offset: null },
+        answers: {
+          items: [
+            { id: 201, topic_id: 6, topic_name: 'API', content: 'Use OpenAPI for docs' },
+            { id: 202, topic_id: 7, topic_name: 'Guides', content: 'Include screenshots' },
+          ],
+          next_offset: 5,
+        },
+      });
+    });
+    globalSearch.expectResultInGroup('topics', 'Docs QA').expectMoreButton('topics', false);
+
+    globalSearch.clickMore('answers');
+    cy.wait(50);
+
+    cy.window().then((win) => {
+      const appComponent = (win as any).appComponent;
+
+      appComponent.globalSearchResults.set({
+        topics: {
+          items: [
+            { id: 13, name: 'Docs QA', message_count: 1 },
+            { id: 14, name: 'Docs polish', message_count: 4 },
+          ],
+          next_offset: null,
+        },
+        questions: { items: [], next_offset: null },
+        answers: {
+          items: [
+            { id: 203, topic_id: 8, topic_name: 'Wiki', content: 'Add onboarding guide' },
+            { id: 204, topic_id: 9, topic_name: 'Docs CI', content: 'Automate doc deploys' },
+          ],
+          next_offset: null,
+        },
+      });
+    });
+    globalSearch.expectResultInGroup('answers', 'Automate doc deploys').expectMoreButton('answers', false);
   });
 });

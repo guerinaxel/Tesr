@@ -4,6 +4,7 @@ from .views import (
     BuildRagIndexView,
     CodeQAView,
     HealthView,
+    SearchView,
     TopicDetailView,
     TopicListView,
 )
@@ -14,4 +15,5 @@ urlpatterns = [
     path("code-qa/build-rag/", BuildRagIndexView.as_view(), name="code-qa-build-rag"),
     path("topics/", TopicListView.as_view(), name="topic-list"),
     path("topics/<int:topic_id>/", TopicDetailView.as_view(), name="topic-detail"),
+    path("search/", SearchView.as_view(), name="search"),
 ]

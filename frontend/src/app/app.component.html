@@ -10,6 +10,101 @@
       <span>Chat</span>
     </button>
 
+    <div class="global-search" [class.global-search--open]="searchVisible()">
+      <mat-form-field appearance="outline" class="global-search__field">
+        <mat-icon matPrefix aria-hidden="true">search</mat-icon>
+        <input
+          matInput
+          placeholder="Chercher"
+          [ngModel]="globalSearchQuery()"
+          (ngModelChange)="onGlobalSearchChange($event)"
+          (focus)="searchVisible.set(true)"
+          data-cy="global-search-input"
+        />
+        <button
+          mat-icon-button
+          matSuffix
+          type="button"
+          *ngIf="globalSearchQuery()"
+          (click)="clearGlobalSearch()"
+          aria-label="Effacer la recherche"
+        >
+          <mat-icon aria-hidden="true">close</mat-icon>
+        </button>
+      </mat-form-field>
+
+      <div
+        class="global-search__panel"
+        *ngIf="searchVisible() && globalSearchQuery().trim()"
+        data-cy="global-search-panel"
+      >
+        @if (globalSearchLoading()) {
+          <div class="global-search__status">Recherche en cours...</div>
+        } @else if (!hasSearchResults()) {
+          <div class="global-search__status">Aucun résultat</div>
+        } @else {
+          <div class="global-search__groups">
+            <div class="global-search__group" data-cy="global-search-group-topics">
+              <div class="global-search__title">Topics</div>
+              <ul>
+                @for (topic of globalSearchResults()?.topics.items ?? []; track topic.id) {
+                  <li data-cy="global-search-topic-item">
+                    <span class="global-search__item-title">{{ topic.name }}</span>
+                    <span class="global-search__meta">{{ topic.message_count }} messages</span>
+                  </li>
+                }
+                @if (globalSearchResults()?.topics.next_offset !== null) {
+                  <li class="global-search__more">
+                    <button type="button" (click)="loadMore('topics')" data-cy="global-search-more-topics">
+                      Chercher plus
+                    </button>
+                  </li>
+                }
+              </ul>
+            </div>
+
+            <div class="global-search__group" data-cy="global-search-group-questions">
+              <div class="global-search__title">Questions</div>
+              <ul>
+                @for (question of globalSearchResults()?.questions.items ?? []; track question.id) {
+                  <li data-cy="global-search-question-item">
+                    <span class="global-search__item-title">{{ question.content }}</span>
+                    <span class="global-search__meta">{{ question.topic_name }}</span>
+                  </li>
+                }
+                @if (globalSearchResults()?.questions.next_offset !== null) {
+                  <li class="global-search__more">
+                    <button type="button" (click)="loadMore('questions')" data-cy="global-search-more-questions">
+                      Chercher plus
+                    </button>
+                  </li>
+                }
+              </ul>
+            </div>
+
+            <div class="global-search__group" data-cy="global-search-group-answers">
+              <div class="global-search__title">Réponses</div>
+              <ul>
+                @for (answer of globalSearchResults()?.answers.items ?? []; track answer.id) {
+                  <li data-cy="global-search-answer-item">
+                    <span class="global-search__item-title">{{ answer.content }}</span>
+                    <span class="global-search__meta">{{ answer.topic_name }}</span>
+                  </li>
+                }
+                @if (globalSearchResults()?.answers.next_offset !== null) {
+                  <li class="global-search__more">
+                    <button type="button" (click)="loadMore('answers')" data-cy="global-search-more-answers">
+                      Chercher plus
+                    </button>
+                  </li>
+                }
+              </ul>
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+
     <span class="toolbar-spacer"></span>
 
     <button

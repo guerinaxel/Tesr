@@ -34,4 +34,24 @@ export class TopicsPanel {
     cy.get('[data-cy="empty-state"]').should('contain', text);
     return this;
   }
+
+  openTopicSearch() {
+    cy.get('[data-cy="topic-search-trigger"]').click();
+    return this;
+  }
+
+  typeTopicSearch(term: string) {
+    cy.get('[data-cy="topic-search-input"]').type(term);
+    return this;
+  }
+
+  expectTopicSearchResult(name: string) {
+    cy.get('[data-cy="topic-search-results"]').contains(name).should('exist');
+    return this;
+  }
+
+  selectTopicFromSearch(name: string) {
+    cy.get('[data-cy="topic-search-results"]').contains(name).click();
+    return this;
+  }
 }

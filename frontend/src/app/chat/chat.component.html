@@ -28,6 +28,60 @@
       </button>
     </form>
 
+    <mat-nav-list class="topics-panel__list topics-panel__search">
+      <a mat-list-item (click)="openTopicSearch()" data-cy="topic-search-trigger">
+        <mat-icon aria-hidden="true">search</mat-icon>
+        <div matLine>Chercher</div>
+        <div matLine class="topic__meta">Rechercher un topic existant</div>
+      </a>
+    </mat-nav-list>
+
+    <div class="topics-search" *ngIf="isTopicSearchVisible()">
+      <div class="topics-search__header">
+        <div>
+          <p class="topics-search__eyebrow">Recherche</p>
+          <h4>Chercher un topic</h4>
+        </div>
+        <button mat-icon-button type="button" (click)="closeTopicSearch()">
+          <mat-icon aria-hidden="true">close</mat-icon>
+        </button>
+      </div>
+
+      <mat-form-field appearance="outline" class="topics-search__input">
+        <mat-label>Nom du topic</mat-label>
+        <input
+          matInput
+          id="topic-search-input"
+          [ngModel]="topicSearchQuery()"
+          (ngModelChange)="onTopicSearchChange($event)"
+          placeholder="Rechercher un topic"
+          data-cy="topic-search-input"
+        />
+        <mat-icon matSuffix aria-hidden="true">search</mat-icon>
+      </mat-form-field>
+
+      <div class="topics-search__results" data-cy="topic-search-results">
+        @if (topicSearchLoading()) {
+          <div class="topics-search__empty">Recherche en cours...</div>
+        } @else if (topicSearchQuery().trim() && topicSearchResults().length === 0) {
+          <div class="topics-search__empty">Aucun résultat</div>
+        } @else {
+          <mat-nav-list>
+            @for (topic of topicSearchResults(); track topicTrackBy) {
+              <a
+                mat-list-item
+                (click)="selectTopicFromSearch(topic.id)"
+                [class.selected]="topic.id === selectedTopicId()"
+              >
+                <div matLine class="topic__name">{{ topic.name }}</div>
+                <div matLine class="topic__meta">{{ topic.message_count }} messages</div>
+              </a>
+            }
+          </mat-nav-list>
+        }
+      </div>
+    </div>
+
     @if (hasTopics()) {
       <cdk-virtual-scroll-viewport
         class="topics-panel__viewport"
