@@ -6,7 +6,7 @@ import {
   stubBuildRag,
   stubCreateTopic,
   stubSearch,
-  stubSendQuestion,
+  stubStreamQuestion,
   stubLastRagRoot,
   stubTopicDetail,
   stubTopicList,
@@ -21,13 +21,17 @@ describe('AI Code Assistant app', () => {
     // Arrange
     stubTopicList([{ id: 1, name: 'Sprint 12', message_count: 0 }]);
     stubTopicDetail({ id: 1, name: 'Sprint 12', message_count: 0, messages: [] });
-    stubSendQuestion(
+    stubStreamQuestion(
       {
         question: 'Bonjour, aide-moi !',
         system_prompt: 'code expert',
         topic_id: 1,
       },
-      { answer: 'Voici une réponse utile.' }
+      [
+        { event: 'meta', data: { num_contexts: 1 } },
+        { event: 'token', data: 'Voici une ' },
+        { event: 'done', data: { answer: 'Voici une réponse utile.' } },
+      ]
     );
 
     // Act
@@ -38,7 +42,7 @@ describe('AI Code Assistant app', () => {
 
     // Assert
     chatPage.expectSendDisabled();
-    cy.wait('@sendQuestion');
+    cy.wait('@streamQuestion');
 
     chatPage
       .expectSendEnabled()
@@ -51,14 +55,17 @@ describe('AI Code Assistant app', () => {
     // Arrange
     stubTopicList([{ id: 2, name: 'Docs', message_count: 0 }]);
     stubTopicDetail({ id: 2, name: 'Docs', message_count: 0, messages: [] });
-    stubSendQuestion(
+    stubStreamQuestion(
       {
         question: 'Salut, explique-moi ceci.',
         system_prompt: 'custom',
         custom_prompt: 'Parle en français',
         topic_id: 2,
       },
-      { answer: 'Réponse sur mesure.' },
+      [
+        { event: 'meta', data: {} },
+        { event: 'done', data: { answer: 'Réponse sur mesure.' } },
+      ],
       'sendCustom'
     );
 
