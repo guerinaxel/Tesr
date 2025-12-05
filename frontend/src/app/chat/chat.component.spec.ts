@@ -77,6 +77,28 @@ describe('ChatComponent', () => {
     expect(component.isSending()).toBeFalse();
   }));
 
+  it('keeps streamed partial tokens when the done payload is empty', fakeAsync(() => {
+    component.question.set('Partial');
+
+    chatDataService.streamQuestion.and.returnValue(
+      of(
+        { event: 'token', data: 'Part' } as StreamChunk,
+        { event: 'token', data: 'ial' } as StreamChunk,
+        { event: 'done', data: {} } as StreamChunk
+      )
+    );
+    chatDataService.getTopicDetail.and.returnValue(
+      of({ id: 1, name: 'Default', message_count: 0, messages: [], next_offset: null })
+    );
+
+    component.onSubmit();
+
+    const assistant = component.messages().find((msg) => msg.from === 'assistant');
+    expect(assistant?.content).toBe('Partial');
+    tick(200);
+    expect(component.isSending()).toBeFalse();
+  }));
+
   it('flags assistant messages when the stream emits an error event', fakeAsync(() => {
     // Arrange
     component.question.set('Trigger stream error');

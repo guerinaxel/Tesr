@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 
-import { firstValueFrom, take, tap } from 'rxjs';
+import { firstValueFrom, lastValueFrom, take, toArray } from 'rxjs';
 
 import { environment } from '../../environments/environment';
 import { ChatDataService } from './chat-data.service';
@@ -166,18 +166,14 @@ describe('ChatDataService', () => {
       .createSpy()
       .and.returnValue(Promise.resolve({ body: { getReader: () => reader } }));
 
-    const events: any[] = [];
-    await firstValueFrom(
+    const events = await lastValueFrom(
       service
         .streamQuestion({ question: 'hello', system_prompt: 'code expert' })
-        .pipe(
-          take(2),
-          tap((evt) => events.push(evt))
-        )
+        .pipe(take(2), toArray())
     );
 
-    expect(events[0].event).toBe('token');
-    expect(events[1].event).toBe('done');
+    expect(events[0]?.event).toBe('token');
+    expect(events[1]?.event).toBe('done');
   });
 
   it('errors when the response body does not support streaming', async () => {
@@ -204,5 +200,15 @@ describe('ChatDataService', () => {
     await expectAsync(
       firstValueFrom(service.streamQuestion({ question: 'oops', system_prompt: 'code expert' }))
     ).toBeRejected();
+  });
+
+  it('propagates fetch failures during streaming', async () => {
+    (globalThis as any).fetch = jasmine
+      .createSpy()
+      .and.returnValue(Promise.reject(new Error('network down')));
+
+    await expectAsync(
+      firstValueFrom(service.streamQuestion({ question: 'f', system_prompt: 'code expert' }))
+    ).toBeRejectedWithError('network down');
   });
 });

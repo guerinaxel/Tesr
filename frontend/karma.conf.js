@@ -6,6 +6,13 @@ const path = require('path');
 const puppeteer = require('puppeteer');
 
 const isCI = !!process.env.CI;
+const chromeFlags = [
+  '--no-sandbox',
+  '--disable-setuid-sandbox',
+  '--disable-gpu',
+  '--disable-dev-shm-usage',
+  '--remote-debugging-port=9222',
+];
 
 if (!process.env.CHROME_BIN) {
   process.env.CHROME_BIN = puppeteer.executablePath();
@@ -55,17 +62,20 @@ module.exports = function (config) {
       useBrowserName: false,
     },
     reporters: ['progress', 'kjhtml', 'junit'],
+    browserNoActivityTimeout: 120000,
+    browserDisconnectTimeout: 120000,
+    browserDisconnectTolerance: 5,
     customLaunchers: {
       ChromeHeadlessCI: {
         base: 'ChromeHeadless',
-        flags: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
+        flags: chromeFlags,
       },
     },
     port: 9876,
     colors: true,
     logLevel: config.LOG_INFO,
     autoWatch: !isCI,
-    browsers: [isCI ? 'ChromeHeadlessCI' : 'Chrome'],
+    browsers: [isCI ? 'ChromeHeadlessCI' : 'ChromeHeadlessCI'],
     singleRun: isCI,
     restartOnFileChange: true,
   });
