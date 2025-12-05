@@ -77,6 +77,28 @@ describe('ChatComponent', () => {
     expect(component.isSending()).toBeFalse();
   }));
 
+  it('flags assistant messages when the stream emits an error event', fakeAsync(() => {
+    // Arrange
+    component.question.set('Trigger stream error');
+
+    chatDataService.streamQuestion.and.returnValue(
+      of({ event: 'error', data: 'Upstream failure' } as StreamChunk)
+    );
+    chatDataService.getTopicDetail.and.returnValue(
+      of({ id: 1, name: 'Default', message_count: 0, messages: [], next_offset: null })
+    );
+
+    // Act
+    component.onSubmit();
+
+    // Assert
+    const assistant = component.messages().find((msg) => msg.from === 'assistant');
+    expect(assistant?.isError).toBeTrue();
+    expect(assistant?.content).toContain('Upstream failure');
+    tick(200);
+    expect(component.isSending()).toBeFalse();
+  }));
+
   it('ignores submits while already sending', () => {
     // Arrange
     component.question.set('Already sending');

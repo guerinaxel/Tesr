@@ -179,4 +179,30 @@ describe('ChatDataService', () => {
     expect(events[0].event).toBe('token');
     expect(events[1].event).toBe('done');
   });
+
+  it('errors when the response body does not support streaming', async () => {
+    (globalThis as any).fetch = jasmine
+      .createSpy()
+      .and.returnValue(Promise.resolve({ body: null }));
+
+    await expectAsync(
+      firstValueFrom(service.streamQuestion({ question: 'hi', system_prompt: 'code expert' }))
+    ).toBeRejectedWith('Streaming not supported by the server response.');
+  });
+
+  it('surfaces JSON parsing errors from SSE chunks', async () => {
+    const encoder = new TextEncoder();
+    const reader = {
+      read: () =>
+        Promise.resolve({ done: false, value: encoder.encode('data: {not-json}\n\n') }),
+    };
+
+    (globalThis as any).fetch = jasmine
+      .createSpy()
+      .and.returnValue(Promise.resolve({ body: { getReader: () => reader } }));
+
+    await expectAsync(
+      firstValueFrom(service.streamQuestion({ question: 'oops', system_prompt: 'code expert' }))
+    ).toBeRejected();
+  });
 });

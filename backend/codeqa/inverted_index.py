@@ -3,13 +3,12 @@ from __future__ import annotations
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Sequence, Tuple
+from typing import List, Sequence, Tuple
 
 from whoosh import index
 from whoosh.fields import ID, TEXT, Schema
 from whoosh.qparser import FuzzyTermPlugin, MultifieldParser, OrGroup
 from whoosh.scoring import BM25F
-from whoosh import writing
 
 
 @dataclass
