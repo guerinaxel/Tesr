@@ -46,7 +46,11 @@ module.exports = function (config) {
     coverageReporter: {
       dir: require('path').join(__dirname, './coverage/ai-code-assistant-frontend'),
       subdir: '.',
-      reporters: [{ type: 'html' }, { type: 'text-summary' }],
+      reporters: [
+        { type: 'text-summary' },
+        // lcovonly keeps CI fast and avoids heavy HTML generation that can trigger browser ping timeouts
+        { type: 'lcovonly' },
+      ],
       check: {
         global: {
           statements: 80,
@@ -62,8 +66,9 @@ module.exports = function (config) {
       useBrowserName: false,
     },
     reporters: ['progress', 'kjhtml', 'junit'],
-    browserNoActivityTimeout: 120000,
+    browserNoActivityTimeout: 300000,
     browserDisconnectTimeout: 120000,
+    browserSocketTimeout: 300000,
     browserDisconnectTolerance: 5,
     customLaunchers: {
       ChromeHeadlessCI: {
