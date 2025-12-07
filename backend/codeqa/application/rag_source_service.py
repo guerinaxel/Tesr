@@ -8,7 +8,10 @@ from typing import Callable, Iterable
 
 from asgiref.sync import sync_to_async
 
-from ..code_extractor import collect_code_chunks as default_collect_code_chunks, iter_text_files as default_iter_text_files
+from ..code_extractor import (
+    collect_code_chunks as default_collect_code_chunks,
+    iter_text_files as default_iter_text_files,
+)
 from ..models import RagSource
 from .. import rag_service as rag_service_module
 from .errors import RagSourceBuildError, RagSourceNotFoundError, RagSourcePathMissingError

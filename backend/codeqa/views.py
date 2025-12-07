@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import inspect
 import json
 from pathlib import Path
 from typing import Any, Iterable
@@ -12,7 +11,6 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from . import rag_service
 from .application import (
     DomainError,
     RagQueryService,
