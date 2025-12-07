@@ -107,6 +107,26 @@ describe('AppComponent', () => {
     expect(component.hasSearchResults()).toBeFalse();
   });
 
+  it('detects search results when only questions exist', () => {
+    component.globalSearchResults.set({
+      topics: { items: [], next_offset: null },
+      questions: { items: [{ id: 2, topic_id: 1, topic_name: 'Only', content: 'Q' }], next_offset: null },
+      answers: { items: [], next_offset: null },
+    });
+
+    expect(component.hasSearchResults()).toBeTrue();
+  });
+
+  it('detects search results when only answers exist', () => {
+    component.globalSearchResults.set({
+      topics: { items: [], next_offset: null },
+      questions: { items: [], next_offset: null },
+      answers: { items: [{ id: 3, topic_id: 1, topic_name: 'Only', content: 'A' }], next_offset: null },
+    });
+
+    expect(component.hasSearchResults()).toBeTrue();
+  });
+
   it('loads more results for a category using the stored offsets', () => {
     // Arrange
     chatDataService.searchEverything.and.returnValue(of(baseResponse));

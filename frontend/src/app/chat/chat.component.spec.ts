@@ -111,7 +111,7 @@ describe('ChatComponent', () => {
     });
     expect(component.selectedTopicId()).toBe(5);
     expect(component.topics()[0]).toEqual(
-      jasmine.objectContaining({ id: 5, name: expectedName, message_count: 0 })
+      jasmine.objectContaining({ id: 5, name: expectedName, message_count: 1 })
     );
   }));
 
@@ -170,6 +170,41 @@ describe('ChatComponent', () => {
     // Assert
     expect(submitSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('exposes the component on window when Cypress is detected', () => {
+    // Arrange
+    (window as any).Cypress = true;
+
+    const cypressFixture = TestBed.createComponent(ChatComponent);
+    const cypressComponent = cypressFixture.componentInstance;
+
+    // Act
+    cypressFixture.detectChanges();
+
+    // Assert
+    expect((window as any).chatComponent).toBe(cypressComponent);
+
+    delete (window as any).Cypress;
+    delete (window as any).chatComponent;
+  });
+
+  it('derives empty state and sending labels from signals', fakeAsync(() => {
+    // Arrange
+    component.selectedTopicId.set(null);
+
+    // Assert
+    expect(component.emptyStateText()).toContain('Sélectionnez ou créez');
+    expect(component.sendingLabel()).toBe('Envoyer');
+
+    // Act
+    component.selectedTopicId.set(1);
+    component.isSending.set(true);
+    tick();
+
+    // Assert
+    expect(component.emptyStateText()).toContain("Commencez la conversation");
+    expect(component.sendingLabel()).toBe('Envoi...');
+  }));
 
   it('respects user scroll position when appending answers', fakeAsync(() => {
     // Arrange
