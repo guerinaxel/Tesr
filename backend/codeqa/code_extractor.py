@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Iterator, List, Optional, Sequence
@@ -147,6 +148,145 @@ def _python_ast_chunks(text: str, max_chars: int = 1200) -> List[str]:
     ]
 
 
+def _node_name(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        value_name = _node_name(node.value)
+        return f"{value_name}.{node.attr}" if value_name else node.attr
+    if isinstance(node, ast.Call):
+        return _node_name(node.func)
+    if isinstance(node, ast.Subscript):
+        return _node_name(node.value)
+    return ""
+
+
+def _summarize_model_fields(class_node: ast.ClassDef) -> list[str]:
+    fields: list[str] = []
+    for stmt in class_node.body:
+        target: str | None = None
+        if isinstance(stmt, ast.Assign) and stmt.targets:
+            first_target = stmt.targets[0]
+            if isinstance(first_target, ast.Name):
+                target = first_target.id
+        elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
+            target = stmt.target.id
+        if target is None:
+            continue
+        value = getattr(stmt, "value", None)
+        value_name = _node_name(value) if value else ""
+        if "Field" in value_name:
+            fields.append(f"{target} ({value_name})")
+        elif value_name:
+            fields.append(f"{target} = {value_name}")
+    return fields
+
+
+def _summarize_class(class_node: ast.ClassDef) -> str:
+    base_names = [_node_name(base) for base in class_node.bases if _node_name(base)]
+    methods = [n.name for n in class_node.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    attributes = _summarize_model_fields(class_node)
+
+    model_bases = {"models.Model", "Model"}
+    view_bases = {"View", "APIView", "ViewSet", "TemplateView", "GenericAPIView"}
+    command_bases = {"BaseCommand"}
+
+    if set(base_names) & model_bases:
+        field_desc = ", ".join(attributes) if attributes else "no explicit fields"
+        return f"Django model {class_node.name} (fields: {field_desc})"
+
+    if set(base_names) & view_bases:
+        method_desc = ", ".join(methods) if methods else "no methods"
+        base_desc = ", ".join(base_names) if base_names else "View"
+        return f"View {class_node.name} (bases: {base_desc}) methods: {method_desc}"
+
+    if set(base_names) & command_bases:
+        method_desc = ", ".join(methods) if methods else "no handlers"
+        extra_attrs = [a for a in attributes if not a.endswith("Field)")]
+        attr_desc = f"; attributes: {', '.join(extra_attrs)}" if extra_attrs else ""
+        return f"Management command {class_node.name} methods: {method_desc}{attr_desc}"
+
+    attr_desc = f" attributes: {', '.join(attributes)}" if attributes else ""
+    method_desc = f" methods: {', '.join(methods)}" if methods else ""
+    base_desc = f" bases: {', '.join(base_names)}" if base_names else ""
+    return f"Class {class_node.name}{base_desc}{method_desc}{attr_desc}".strip()
+
+
+def describe_python_semantics(path: Path, text: str) -> str:
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return ""
+
+    summaries: list[str] = []
+    functions: list[str] = []
+
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            arg_names = [arg.arg for arg in node.args.args]
+            arg_text = ", ".join(arg_names)
+            functions.append(f"Function {node.name}({arg_text})")
+        elif isinstance(node, ast.ClassDef):
+            summary = _summarize_class(node)
+            if summary:
+                summaries.append(summary)
+
+    if not summaries and not functions:
+        return ""
+
+    lines = [f"Python overview for {path.name}:"]
+    if summaries:
+        lines.extend(f"- {line}" for line in summaries)
+    if functions:
+        lines.append("Functions:")
+        lines.extend(f"  - {fn}" for fn in functions)
+
+    return "\n".join(lines)
+
+
+_SYMBOL_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"^\s*def\s+(?P<name>[\w_]+)\s*\("), "Function {name}()"),
+    (re.compile(r"^\s*class\s+(?P<name>[\w_]+)\b"), "Class {name}"),
+    (re.compile(r"^\s*(?:export\s+)?function\s+(?P<name>[\w_]+)\s*\("), "Function {name}()"),
+    (re.compile(r"^\s*(?:export\s+)?class\s+(?P<name>[\w_]+)\b"), "Class {name}"),
+    (re.compile(r"^\s*export\s+(?:const|let|var)\s+(?P<name>[\w_]+)\s*="), "Export {name}"),
+    (re.compile(r"^\s*(?:interface|type)\s+(?P<name>[\w_]+)\b"), "Type {name}"),
+    (re.compile(r"^\s*(?:const|let|var)\s+(?P<name>[\w_]+)\s*="), "Variable {name}"),
+)
+
+
+def describe_file_overview(path: Path, text: str) -> str:
+    if not text.strip():
+        return ""
+
+    if path.suffix == ".py":
+        py_summary = describe_python_semantics(path, text)
+        if py_summary:
+            return py_summary
+
+    lines = text.splitlines()
+    symbols: list[str] = []
+    for line in lines:
+        for pattern, template in _SYMBOL_PATTERNS:
+            match = pattern.match(line)
+            if match:
+                name = match.group("name")
+                rendered = template.format(name=name)
+                if rendered not in symbols:
+                    symbols.append(rendered)
+    preview = [ln.strip() for ln in lines if ln.strip()][:3]
+
+    components: list[str] = [f"File overview for {path.name} ({len(lines)} lines):"]
+    if symbols:
+        components.append("Symbols:")
+        components.extend(f"- {entry}" for entry in symbols)
+    if preview:
+        components.append("Preview:")
+        components.extend(f"  {line}" for line in preview)
+
+    return "\n".join(components)
+
+
 def _iter_ts_nodes(root: object, target_types: Sequence[str]) -> Iterator[object]:
     stack = [root]
     while stack:
@@ -221,10 +361,14 @@ def collect_code_chunks(root: Path) -> List[str]:
         except Exception:
             continue
         try:
+            semantic_summary = ""
+            semantic_summary = describe_file_overview(file_path, text)
             if file_path.suffix in AST_EXTENSIONS:
                 file_chunks = chunk_code_with_ast(file_path, text)
             else:
                 file_chunks = chunk_text(text)
+            if semantic_summary:
+                file_chunks = [semantic_summary, *file_chunks]
         except Exception:
             file_chunks = chunk_text(text)
         for ch in file_chunks:
