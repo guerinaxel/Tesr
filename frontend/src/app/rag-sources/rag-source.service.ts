@@ -26,7 +26,7 @@ export interface UpdateRagSourcePayload {
   description?: string;
 }
 
-export interface RebuildRagSourcePayload extends BuildRagSourcePayload {}
+export type RebuildRagSourcePayload = BuildRagSourcePayload;
 
 @Injectable({ providedIn: 'root' })
 export class RagSourceService {
