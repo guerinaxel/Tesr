@@ -15,11 +15,18 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import rag_service
+from .document_service import (
+    Document,
+    answer_question_from_documents,
+    categorize_document,
+    summarize_content,
+)
 from .rag_state import get_default_root, load_last_root, save_last_root
 from .models import Message, Topic
 from .serializers import (
     BuildRagRequestSerializer,
     CodeQuestionSerializer,
+    DocumentAnalysisSerializer,
     TopicCreateSerializer,
 )
 
@@ -347,6 +354,39 @@ class SearchView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class DocumentAnalysisView(APIView):
+    """Summarize, categorize, and answer questions about provided documents."""
+
+    def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> Response:
+        serializer = DocumentAnalysisSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        documents = [
+            Document(name=doc_data["name"], content=doc_data["content"])
+            for doc_data in serializer.validated_data["documents"]
+        ]
+        question: str = serializer.validated_data.get("question") or ""
+
+        summaries = [
+            {"name": doc.name, "summary": summarize_content(doc.content)}
+            for doc in documents
+        ]
+        categories = [
+            {"name": doc.name, "category": categorize_document(doc.name, doc.content)}
+            for doc in documents
+        ]
+
+        response_payload: dict[str, Any] = {
+            "summaries": summaries,
+            "categories": categories,
+        }
+
+        if question:
+            response_payload["answer"] = answer_question_from_documents(question, documents)
+
+        return Response(response_payload, status=status.HTTP_200_OK)
 
 
 class HealthView(APIView):

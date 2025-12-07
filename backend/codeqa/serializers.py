@@ -82,3 +82,24 @@ class BuildRagRequestSerializer(serializers.Serializer):
         default=None,
         help_text="Optional filesystem path to use as project root when building the RAG index.",
     )
+
+
+class DocumentSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=500)
+    content = serializers.CharField(allow_blank=True)
+
+
+class DocumentAnalysisSerializer(serializers.Serializer):
+    documents = DocumentSerializer(many=True)
+    question = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        default="",
+        help_text="Optional question to answer using the provided documents.",
+    )
+
+    def validate_documents(self, documents: list[dict]) -> list[dict]:
+        if not documents:
+            raise serializers.ValidationError("At least one document is required.")
+        return documents
