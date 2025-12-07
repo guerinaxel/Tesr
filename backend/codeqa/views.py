@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import inspect
-import json
-import shutil
-from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -15,6 +12,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import rag_service
+from .application import (
+    DomainError,
+    RagQueryService,
+    RagSourceService,
+)
 from .document_service import (
     Document,
     answer_question_from_documents,
@@ -23,7 +25,7 @@ from .document_service import (
 )
 from .build_runner import BuildInProgressError, get_progress, start_build
 from .rag_state import get_default_root, load_last_root, save_last_root
-from .models import Message, Topic, RagSource
+from .models import Message, Topic
 from .serializers import (
     BuildRagRequestSerializer,
     CodeQuestionSerializer,
@@ -34,8 +36,14 @@ from .serializers import (
     RagSourceUpdateSerializer,
     TopicCreateSerializer,
 )
-from .code_extractor import collect_code_chunks, iter_text_files
-from .rag_service import _rag_sources_base_dir, drop_cached_source
+
+
+rag_query_service = RagQueryService()
+rag_source_service = RagSourceService()
+
+
+def _handle_domain_error(exc: DomainError) -> Response:
+    return Response({"detail": exc.detail, "code": exc.code}, status=exc.status_code)
 
 
 def _parse_pagination(request: HttpRequest, *, default_limit: int = 20, max_limit: int = 50) -> tuple[int, int]:
@@ -111,15 +119,12 @@ class CodeQAView(APIView):
             answer_kwargs["fusion_weight"] = fusion_weight
 
         try:
-            answer, meta = rag_service.answer_question(**answer_kwargs)
-        except rag_service.AnswerNotReadyError as exc:
+            answer, meta = rag_query_service.answer(**answer_kwargs)
+        except DomainError as exc:
+            return _handle_domain_error(exc)
+        except Exception as exc:
             return Response(
-                {"detail": str(exc)},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-        except Exception as e:
-            return Response(
-                {"detail": "Internal server error.", "errors": str(e)},
+                {"detail": "Internal server error.", "errors": str(exc)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -170,7 +175,7 @@ class CodeQAStreamView(APIView):
                 )
 
         try:
-            meta, token_stream = rag_service.stream_answer(
+            meta, token_stream = rag_query_service.stream(
                 question=question,
                 top_k=top_k,
                 fusion_weight=fusion_weight,
@@ -178,11 +183,8 @@ class CodeQAStreamView(APIView):
                 custom_prompt=custom_prompt or typo_prompt,
                 sources=sources,
             )
-        except rag_service.AnswerNotReadyError as exc:
-            return Response(
-                {"detail": str(exc)},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
+        except DomainError as exc:
+            return _handle_domain_error(exc)
         except Exception as exc:  # pragma: no cover - defensive path
             return Response(
                 {"detail": "Internal server error.", "errors": str(exc)},
@@ -461,85 +463,9 @@ class BuildRagIndexView(APIView):
         )
 
 
-def _write_metadata_file(source: RagSource) -> None:
-    base_dir = Path(source.path)
-    base_dir.mkdir(parents=True, exist_ok=True)
-    metadata = {
-        "id": str(source.id),
-        "name": source.name,
-        "description": source.description,
-        "path": source.path,
-        "total_files": source.total_files,
-        "total_chunks": source.total_chunks,
-    }
-    (base_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
-
-
-def _build_source(
-    *,
-    name: str | None,
-    description: str | None,
-    paths: list[str],
-    existing: RagSource | None = None,
-) -> RagSource:
-    resolved_paths = [Path(p).resolve() for p in paths]
-    counter: Counter[str] = Counter()
-    total_files = 0
-    chunks: list[str] = []
-
-    for path in resolved_paths:
-        if not path.exists():
-            raise FileNotFoundError(f"Path not found: {path}")
-        chunks.extend(collect_code_chunks(path))
-        files_here = list(iter_text_files(path))
-        total_files += len(files_here)
-        counter.update(f.suffix for f in files_here)
-
-    total_chunks = len(chunks)
-    final_name = (name or resolved_paths[0].name).strip()
-    popular_ext = ", ".join(ext for ext, _ in counter.most_common(3)) or "files"
-    final_description = (description or (
-        f"Auto-generated source from {len(resolved_paths)} path(s) containing {total_files} files ({popular_ext})."
-    )).strip()
-
-    if existing is None:
-        source = RagSource.objects.create(
-            name=final_name,
-            description=final_description,
-            path="",
-            total_files=total_files,
-            total_chunks=total_chunks,
-        )
-    else:
-        source = existing
-        source.name = final_name
-        source.description = final_description
-        source.total_files = total_files
-        source.total_chunks = total_chunks
-
-    base_dir = _rag_sources_base_dir() / str(source.id)
-    if base_dir.exists():
-        shutil.rmtree(base_dir)
-    base_dir.mkdir(parents=True, exist_ok=True)
-    source.path = str(base_dir)
-    source.save(update_fields=["name", "description", "total_files", "total_chunks", "path"])
-
-    config = rag_service._build_config_from_env()
-    config.index_path = base_dir / "rag_index.faiss"
-    config.docs_path = base_dir / "docs.pkl"
-    config.whoosh_index_dir = base_dir / "whoosh_index"
-
-    rag_index = rag_service.RagIndex(config)
-    rag_index.build_from_texts(chunks)
-
-    _write_metadata_file(source)
-    drop_cached_source(str(source.id))
-    return source
-
-
 class RagSourceListView(APIView):
     def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> Response:
-        sources = RagSource.objects.all().order_by("-created_at")
+        sources = rag_source_service.list_sources()
         serializer = RagSourceSerializer(
             [
                 {
@@ -568,14 +494,9 @@ class RagSourceBuildView(APIView):
         description = serializer.validated_data.get("description")
 
         try:
-            source = _build_source(name=name, description=description, paths=paths)
-        except FileNotFoundError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as exc:
-            return Response(
-                {"detail": "Failed to build RAG source.", "errors": str(exc)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+            source = rag_source_service.build_source(name=name, description=description, paths=paths)
+        except DomainError as exc:
+            return _handle_domain_error(exc)
 
         payload = {
             "id": source.id,
@@ -594,21 +515,14 @@ class RagSourceDetailView(APIView):
         serializer = RagSourceUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        source = get_object_or_404(RagSource.objects.all(), id=source_id)
-        updated_fields: list[str] = []
-
-        if "name" in serializer.validated_data:
-            source.name = serializer.validated_data.get("name") or source.name
-            updated_fields.append("name")
-
-        if "description" in serializer.validated_data:
-            source.description = serializer.validated_data.get("description") or ""
-            updated_fields.append("description")
-
-        if updated_fields:
-            source.save(update_fields=updated_fields)
-            _write_metadata_file(source)
-            drop_cached_source(str(source.id))
+        try:
+            source = rag_source_service.update_metadata(
+                source_id=source_id,
+                name=serializer.validated_data.get("name"),
+                description=serializer.validated_data.get("description"),
+            )
+        except DomainError as exc:
+            return _handle_domain_error(exc)
 
         return Response(
             RagSourceSerializer(source).data,
@@ -621,25 +535,19 @@ class RagSourceRebuildView(APIView):
         serializer = RagSourceRebuildSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        source = get_object_or_404(RagSource.objects.all(), id=source_id)
         name = serializer.validated_data.get("name")
         description = serializer.validated_data.get("description")
         paths = serializer.validated_data["paths"]
 
         try:
-            updated_source = _build_source(
+            updated_source = rag_source_service.rebuild_source(
+                source_id=source_id,
                 name=name,
                 description=description,
                 paths=paths,
-                existing=source,
             )
-        except FileNotFoundError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as exc:
-            return Response(
-                {"detail": "Failed to rebuild RAG source.", "errors": str(exc)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+        except DomainError as exc:
+            return _handle_domain_error(exc)
 
         return Response(
             RagSourceSerializer(updated_source).data,
