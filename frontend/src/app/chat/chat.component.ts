@@ -25,7 +25,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
-import { Subject } from 'rxjs';
+import { Subject, Subscription } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
@@ -91,6 +91,8 @@ export class ChatComponent implements OnInit {
   private hasMoreMessages = true;
   private messagesLoading = false;
   private nextId = 1;
+  private streamSub: Subscription | null = null;
+  private streamingMessageId: number | null = null;
 
   readonly hasTopics = computed(() => this.topics().length > 0);
   readonly hasMessages = computed(() => this.messages().length > 0);
@@ -143,6 +145,8 @@ export class ChatComponent implements OnInit {
           },
         });
       });
+
+    this.destroyRef.onDestroy(() => this.stopStreaming());
   }
 
   onSubmit(): void {
@@ -183,32 +187,7 @@ export class ChatComponent implements OnInit {
       payload.custom_prompt = this.customPrompt().trim();
     }
 
-    this.chatDataService.sendQuestion(payload).subscribe({
-      next: (res) => {
-        const aiMsg: ChatMessage = {
-          id: this.nextId++,
-          from: 'assistant',
-          content: res.answer ?? '(empty answer)',
-        };
-        this.messages.update((msgs) => [...msgs, aiMsg]);
-        this.finishSending();
-        this.refreshTopicMetadata(this.selectedTopicId());
-        this.scrollToBottom();
-      },
-      error: (err) => {
-        const detail =
-          err?.error?.detail ?? 'Erreur lors de la requête à /api/code-qa/.';
-        const errorMsg: ChatMessage = {
-          id: this.nextId++,
-          from: 'assistant',
-          content: detail,
-          isError: true,
-        };
-        this.messages.update((msgs) => [...msgs, errorMsg]);
-        this.finishSending();
-        this.scrollToBottom();
-      },
-    });
+    this.startStreamingAnswer(payload);
   }
 
   onSpaceSend(event: KeyboardEvent): void {
@@ -241,6 +220,87 @@ export class ChatComponent implements OnInit {
     setTimeout(() => {
       this.isSending.set(false);
     }, 200);
+  }
+
+  private stopStreaming(): void {
+    if (this.streamSub) {
+      this.streamSub.unsubscribe();
+      this.streamSub = null;
+      this.streamingMessageId = null;
+    }
+  }
+
+  private startStreamingAnswer(payload: CodeQaPayload): void {
+    this.stopStreaming();
+    const assistantMsg: ChatMessage = {
+      id: this.nextId++,
+      from: 'assistant',
+      content: '',
+    };
+    this.streamingMessageId = assistantMsg.id;
+    this.messages.update((msgs) => [...msgs, assistantMsg]);
+
+    this.streamSub = this.chatDataService.streamQuestion(payload).subscribe({
+      next: (chunk) => {
+        if (!chunk || typeof chunk !== 'object') return;
+        const event = (chunk as any).event;
+        const data = (chunk as any).data;
+
+        if (event === 'token' && typeof data === 'string') {
+          this.messages.update((msgs) =>
+            msgs.map((msg) =>
+              msg.id === this.streamingMessageId
+                ? { ...msg, content: msg.content + data }
+                : msg
+            )
+          );
+          this.scrollToBottom();
+          return;
+        }
+
+        if (event === 'error' && typeof data === 'string') {
+          this.messages.update((msgs) =>
+            msgs.map((msg) =>
+              msg.id === this.streamingMessageId
+                ? { ...msg, content: data, isError: true }
+                : msg
+            )
+          );
+          this.finishSending();
+          this.stopStreaming();
+          return;
+        }
+
+        if (event === 'done') {
+          const answer = typeof data === 'object' && data ? (data as any).answer ?? '' : '';
+          if (answer) {
+            this.messages.update((msgs) =>
+              msgs.map((msg) =>
+                msg.id === this.streamingMessageId
+                  ? { ...msg, content: answer as string }
+                  : msg
+              )
+            );
+          }
+
+          this.finishSending();
+          this.refreshTopicMetadata(this.selectedTopicId());
+          this.stopStreaming();
+          this.scrollToBottom();
+        }
+      },
+      error: (err) => {
+        const detail =
+          err?.message ?? err?.toString?.() ?? 'Erreur lors de la requête à /api/code-qa/stream/.';
+        this.messages.update((msgs) => [
+          ...msgs,
+          { id: this.nextId++, from: 'assistant', content: detail, isError: true },
+        ]);
+        this.finishSending();
+        this.stopStreaming();
+        this.scrollToBottom();
+      },
+    });
   }
 
   loadTopics(selectTopicId: number | null = null, reset = false): void {

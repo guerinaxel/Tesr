@@ -23,11 +23,22 @@ class RagServiceTests(SimpleTestCase):
         )
         sys.modules["joblib"] = types.SimpleNamespace(dump=lambda *_, **__: None, load=lambda *_: [])
 
+        def fake_chat(model, messages, stream=False, **_kwargs):  # type: ignore[override]
+            if stream:
+                def _gen():
+                    yield SimpleNamespace(message={"content": f"{model}-chunk"})
+
+                return _gen()
+            return SimpleNamespace(message=SimpleNamespace(content=f"answer from {model}"))
+
         sys.modules["ollama"] = types.SimpleNamespace(
             ChatResponse=SimpleNamespace,
-            chat=lambda model, messages, **_kwargs: SimpleNamespace(
-                message=SimpleNamespace(content=f"answer from {model}")
-            ),
+            chat=fake_chat,
+        )
+        sys.modules["codeqa.inverted_index"] = types.SimpleNamespace(InvertedIndex=SimpleNamespace)
+        sys.modules["codeqa.embedding_cache"] = types.SimpleNamespace(
+            QueryEmbeddingCache=object,
+            build_cache_from_env=lambda: SimpleNamespace(get=lambda _q: None, set=lambda _q, _e: None)
         )
         from codeqa import rag_index as rag_index_module
         importlib.reload(rag_index_module)
@@ -62,6 +73,19 @@ class RagServiceTests(SimpleTestCase):
         # Act & Assert
         with self.assertRaises(self.rag_service.AnswerNotReadyError):
             self.rag_service.answer_question("Missing")
+
+    def test_stream_answer_returns_tokens_and_meta(self) -> None:
+        class FakeIndex:
+            def search(self, query: str, k: int, fusion_weight: float = 0.5):
+                return [(f"snippet for {query}", 0.42)]
+
+        self.rag_service._rag_index = FakeIndex()
+
+        meta, stream = self.rag_service.stream_answer("Hello")
+        tokens = list(stream)
+
+        self.assertEqual(1, meta["num_contexts"])
+        self.assertTrue(any("llama3.1:8b" in token for token in tokens))
 
     def test_document_expert_uses_qwen_model(self) -> None:
         # Arrange

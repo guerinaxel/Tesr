@@ -50,6 +50,22 @@ export const stubSendQuestion = (
   }).as(alias);
 };
 
+export const stubStreamQuestion = (
+  expectedBody: ChatRequestBody,
+  events: Array<{ event: string; data: unknown }>,
+  alias = 'streamQuestion'
+) => {
+  cy.intercept('POST', `${apiUrl}/code-qa/stream/`, (req) => {
+    expect(req.body).to.deep.equal(expectedBody);
+    const body = events.map((evt) => `data: ${JSON.stringify(evt)}\n\n`).join('');
+    req.reply({
+      statusCode: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+      body,
+    });
+  }).as(alias);
+};
+
 export const stubBuildRag = (alias = 'buildRag') => {
   cy.intercept('POST', `${apiUrl}/code-qa/build-rag/`, (req) => {
     req.reply({ statusCode: 200, body: {} });

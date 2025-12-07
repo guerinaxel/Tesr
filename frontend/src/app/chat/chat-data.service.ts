@@ -1,5 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
+import { Observable } from 'rxjs';
 
 import { environment } from '../../environments/environment';
 
@@ -51,6 +52,11 @@ export interface CodeQaResponse {
   meta?: unknown;
 }
 
+export interface StreamChunk {
+  event: 'meta' | 'token' | 'done' | 'error';
+  data: unknown;
+}
+
 export interface PaginationOptions {
   offset?: number;
   limit?: number;
@@ -63,6 +69,94 @@ export class ChatDataService {
 
   sendQuestion(payload: CodeQaPayload) {
     return this.http.post<CodeQaResponse>(`${this.apiUrl}/code-qa/`, payload);
+  }
+
+  streamQuestion(payload: CodeQaPayload): Observable<StreamChunk> {
+    return new Observable<StreamChunk>((observer) => {
+      const controller = new AbortController();
+      let active = true;
+
+      fetch(`${this.apiUrl}/code-qa/stream/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      })
+        .then((response) => {
+          const reader = response.body?.getReader();
+          if (!reader) {
+            active = false;
+            observer.error('Streaming not supported by the server response.');
+            return;
+          }
+
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          const readChunk = (): void => {
+            if (!active) {
+              return;
+            }
+
+            reader
+              .read()
+              .then(({ done, value }) => {
+                if (!active) {
+                  return;
+                }
+
+                if (done) {
+                  active = false;
+                  observer.complete();
+                  return;
+                }
+
+                buffer += decoder.decode(value, { stream: true });
+
+                let delimiterIndex = buffer.indexOf('\n\n');
+                while (delimiterIndex >= 0) {
+                  const rawEvent = buffer.slice(0, delimiterIndex).trim();
+                  buffer = buffer.slice(delimiterIndex + 2);
+
+                  if (rawEvent.startsWith('data:')) {
+                    const payloadText = rawEvent.slice(5).trim();
+                    if (payloadText) {
+                      try {
+                        observer.next(JSON.parse(payloadText));
+                      } catch (error) {
+                        active = false;
+                        observer.error(error);
+                        controller.abort();
+                        return;
+                      }
+                    }
+                  }
+
+                  delimiterIndex = buffer.indexOf('\n\n');
+                }
+
+                readChunk();
+              })
+              .catch((err) => {
+                if (!active) return;
+                active = false;
+                observer.error(err);
+              });
+          };
+
+          readChunk();
+        })
+        .catch((error) => {
+          if (!active) return;
+          active = false;
+          observer.error(error);
+        });
+
+      return () => {
+        active = false;
+        controller.abort();
+      };
+    });
   }
 
   getTopics(options: PaginationOptions = {}) {
