@@ -169,6 +169,35 @@ function helper(x: number) {{
         self.assertTrue(any("<html>" in chunk for chunk in html_chunks))
         self.assertGreater(len(html_chunks), 1)
 
+    def test_generates_overview_for_service_like_files(self) -> None:
+        # Arrange
+        service_path = self.root_path / "orders.service.js"
+        service_path.write_text(
+            """
+export class OrderService {
+  constructor(client) {
+    this.client = client;
+  }
+
+  listOrders() {
+    return this.client.get('/orders');
+  }
+}
+
+export const handler = () => 'ok';
+""".strip()
+        )
+
+        # Act
+        chunks = collect_code_chunks(self.root_path)
+
+        # Assert
+        overview_chunks = [chunk for chunk in chunks if "File overview for orders.service.js" in chunk]
+        self.assertTrue(overview_chunks)
+        overview_text = "\n".join(overview_chunks)
+        self.assertIn("Class OrderService", overview_text)
+        self.assertIn("Export handler", overview_text)
+
     def test_pdf_and_docx_are_chunked_after_extraction(self) -> None:
         # Arrange
         pdf_path = self.root_path / "sample.pdf"
@@ -189,6 +218,50 @@ function helper(x: number) {{
         self.assertTrue(any("File: sample.pdf" in chunk for chunk in chunks))
         self.assertTrue(any("File: sample.docx" in chunk for chunk in chunks))
         self.assertGreaterEqual(mock_chunk.call_count, 2)
+
+    def test_django_python_semantics_are_described(self) -> None:
+        # Arrange
+        python_path = self.root_path / "models_and_views.py"
+        python_path.write_text(
+            """
+from django.db import models
+from django.views import View
+from django.core.management.base import BaseCommand
+
+
+class Book(models.Model):
+    title = models.CharField(max_length=100)
+    published = models.BooleanField(default=False)
+
+
+class HomeView(View):
+    def get(self, request):
+        return None
+
+
+class Command(BaseCommand):
+    help = "Sync books"
+
+    def handle(self, *args, **kwargs):
+        return "done"
+
+
+def helper(value):
+    return value + 1
+"""
+        )
+
+        # Act
+        chunks = collect_code_chunks(self.root_path)
+
+        # Assert
+        semantic_chunks = [chunk for chunk in chunks if "Python overview" in chunk]
+        self.assertTrue(semantic_chunks)
+        semantic_text = "\n".join(semantic_chunks)
+        self.assertIn("Django model Book", semantic_text)
+        self.assertIn("View HomeView", semantic_text)
+        self.assertIn("Management command Command", semantic_text)
+        self.assertIn("Function helper", semantic_text)
 
 
 class ExtractPdfTextTests(SimpleTestCase):
