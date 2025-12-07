@@ -45,6 +45,7 @@ from codeqa.views import (  # noqa: E402
     BuildRagIndexView,
     CodeQAStreamView,
     CodeQAView,
+    DocumentAnalysisView,
     HealthView,
     SearchView,
     TopicDetailView,
@@ -443,3 +444,40 @@ class SearchViewTests(TestCase):
         # Assert
         self.assertEqual(1, len(second_page.data["questions"]["items"]))
         self.assertIsNone(second_page.data["questions"]["next_offset"])
+
+
+class DocumentAnalysisViewTests(SimpleTestCase):
+    def setUp(self) -> None:
+        self.factory = APIRequestFactory()
+
+    def test_returns_summaries_and_categories(self) -> None:
+        payload = {
+            "documents": [
+                {"name": "notes.md", "content": "First sentence. Second one explains more."},
+                {"name": "script.py", "content": "def add(a, b):\n    return a + b"},
+            ],
+            "question": "How do I add numbers?",
+        }
+
+        response = DocumentAnalysisView.as_view()(self.factory.post("/api/document-qa/", payload, format="json"))
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertEqual(2, len(response.data["summaries"]))
+        self.assertEqual("documentation", response.data["categories"][0]["category"])
+        self.assertEqual("source code", response.data["categories"][1]["category"])
+        self.assertIn("Based on script.py", response.data["answer"])
+
+    def test_question_is_optional(self) -> None:
+        payload = {"documents": [{"name": "empty.txt", "content": ""}], "question": ""}
+
+        response = DocumentAnalysisView.as_view()(self.factory.post("/api/document-qa/", payload, format="json"))
+
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertNotIn("answer", response.data)
+
+    def test_requires_documents(self) -> None:
+        response = DocumentAnalysisView.as_view()(
+            self.factory.post("/api/document-qa/", {"documents": []}, format="json")
+        )
+
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
