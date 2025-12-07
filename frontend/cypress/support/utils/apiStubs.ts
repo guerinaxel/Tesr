@@ -12,7 +12,7 @@ type ChatRequestBody = {
   question: string;
   system_prompt: string;
   custom_prompt?: string;
-  topic_id: string;
+  topic_id?: number;
 };
 
 export const stubTopicList = (

@@ -51,6 +51,38 @@ describe('AI Code Assistant app', () => {
       .expectAssistantMessageCount(1);
   });
 
+  it('creates a topic from the first message and sends with Enter', () => {
+    // Arrange
+    const question = 'Nouvelle exploration du module paiement';
+    const expectedTopic = `${question}`;
+
+    stubTopicList([]);
+    cy.intercept('POST', `${apiUrl}/topics/`, (req) => {
+      expect(req.body).to.deep.equal({ name: expectedTopic });
+      req.reply({ id: 4, name: expectedTopic, message_count: 0, messages: [], next_offset: null });
+    }).as('createTopic');
+    stubTopicDetail({ id: 4, name: expectedTopic, message_count: 1, messages: [] });
+    stubStreamQuestion(
+      { question, system_prompt: 'code expert', topic_id: 4 },
+      [
+        { event: 'token', data: 'Réponse en ' },
+        { event: 'done', data: { answer: 'Réponse en cours.' } },
+      ],
+      'streamNewTopic'
+    );
+
+    // Act
+    chatPage.visit();
+    topicsPanel.waitForTopicList();
+    chatPage.typeQuestionWithEnter(question);
+
+    // Assert
+    cy.wait('@createTopic');
+    cy.wait('@streamNewTopic');
+    topicsPanel.expectTopicSelected(expectedTopic);
+    chatPage.expectAssistantMessageContains('Réponse en cours.');
+  });
+
   it('allows selecting a custom system prompt and sends it to the API', () => {
     // Arrange
     stubTopicList([{ id: 2, name: 'Docs', message_count: 0 }]);

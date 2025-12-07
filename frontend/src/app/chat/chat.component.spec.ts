@@ -77,6 +77,44 @@ describe('ChatComponent', () => {
     expect(component.isSending()).toBeFalse();
   }));
 
+  it('auto-creates a topic when none is selected before sending', fakeAsync(() => {
+    // Arrange
+    const longQuestion =
+      'Implementer une fonctionnalité complexe qui dépasse largement la limite de caractères habituelle pour le titre du topic.';
+    const normalized = longQuestion.trim().replace(/\s+/g, ' ');
+    const expectedName = normalized.slice(0, 59) + '…';
+
+    component.topics.set([]);
+    component.selectedTopicId.set(null);
+    component.question.set(longQuestion);
+
+    chatDataService.createTopic.and.returnValue(
+      of({ id: 5, name: expectedName, message_count: 0, messages: [], next_offset: null })
+    );
+    chatDataService.streamQuestion.and.returnValue(
+      of({ event: 'done', data: { answer: 'Topic ready' } } as StreamChunk)
+    );
+    chatDataService.getTopicDetail.and.returnValue(
+      of({ id: 5, name: expectedName, message_count: 1, messages: [], next_offset: null })
+    );
+
+    // Act
+    component.onSubmit();
+    tick(200);
+
+    // Assert
+    expect(chatDataService.createTopic).toHaveBeenCalledWith(expectedName);
+    expect(chatDataService.streamQuestion).toHaveBeenCalledWith({
+      question: longQuestion,
+      system_prompt: 'code expert',
+      topic_id: 5,
+    });
+    expect(component.selectedTopicId()).toBe(5);
+    expect(component.topics()[0]).toEqual(
+      jasmine.objectContaining({ id: 5, name: expectedName, message_count: 0 })
+    );
+  }));
+
   it('keeps streamed partial tokens when the done payload is empty', fakeAsync(() => {
     component.question.set('Partial');
 
@@ -119,6 +157,48 @@ describe('ChatComponent', () => {
     expect(assistant?.content).toContain('Upstream failure');
     tick(200);
     expect(component.isSending()).toBeFalse();
+  }));
+
+  it('submits when pressing Enter and ignores Shift+Enter', () => {
+    // Arrange
+    const submitSpy = spyOn(component, 'onSubmit');
+
+    // Act
+    component.onEnterSend(new KeyboardEvent('keydown', { key: 'Enter' }));
+    component.onEnterSend(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true }));
+
+    // Assert
+    expect(submitSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('respects user scroll position when appending answers', fakeAsync(() => {
+    // Arrange
+    const viewportSpy = jasmine.createSpyObj('CdkVirtualScrollViewport', [
+      'scrollToIndex',
+      'measureScrollOffset',
+    ]);
+    viewportSpy.measureScrollOffset.and.returnValue(100);
+    (component as any).messagesViewport = viewportSpy;
+
+    (component as any).shouldStickToBottom = false;
+
+    // Act
+    (component as any).scrollToBottom();
+    tick();
+
+    // Assert
+    expect(viewportSpy.scrollToIndex).not.toHaveBeenCalled();
+
+    // Arrange
+    viewportSpy.measureScrollOffset.and.returnValue(0);
+    (component as any).shouldStickToBottom = true;
+
+    // Act
+    (component as any).scrollToBottom();
+    tick();
+
+    // Assert
+    expect(viewportSpy.scrollToIndex).toHaveBeenCalled();
   }));
 
   it('ignores submits while already sending', () => {
