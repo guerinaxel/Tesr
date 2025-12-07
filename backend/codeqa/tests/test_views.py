@@ -476,6 +476,8 @@ class DocumentAnalysisViewTests(SimpleTestCase):
         self.assertNotIn("answer", response.data)
 
     def test_requires_documents(self) -> None:
-        response = DocumentAnalysisView.as_view()(self.factory.post("/api/document-qa/", {"documents": []}, format="json"))
+        response = DocumentAnalysisView.as_view()(
+            self.factory.post("/api/document-qa/", {"documents": []}, format="json")
+        )
 
         self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
