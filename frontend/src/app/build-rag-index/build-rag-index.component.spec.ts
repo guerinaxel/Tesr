@@ -28,7 +28,6 @@ describe('BuildRagIndexComponent', () => {
     component = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);
     fixture.detectChanges();
-    flushInitialRoot();
   });
 
   afterEach(() => {
@@ -38,6 +37,8 @@ describe('BuildRagIndexComponent', () => {
   it('loads the last used root on init', () => {
     // Arrange & Act handled in setup
 
+    flushInitialRoot();
+
     // Assert
     expect(component.root).toBe('/workspace/default');
     expect(component.lastUsedRoot).toBe('/workspace/default');
@@ -45,6 +46,7 @@ describe('BuildRagIndexComponent', () => {
 
   it('sends the root value to the backend and shows a success toast', () => {
     // Arrange
+    flushInitialRoot();
     component.root = '/workspace/project';
 
     // Act
@@ -67,6 +69,7 @@ describe('BuildRagIndexComponent', () => {
 
   it('shows an error toast when the request fails', () => {
     // Arrange
+    flushInitialRoot();
     component.root = '';
 
     // Act
@@ -83,6 +86,7 @@ describe('BuildRagIndexComponent', () => {
 
   it('keeps the submit button in loading state until the call resolves', () => {
     // Arrange
+    flushInitialRoot();
     component.root = '/tmp';
 
     // Act
@@ -101,6 +105,7 @@ describe('BuildRagIndexComponent', () => {
 
   it('rebuilds using the last known root value', () => {
     // Arrange
+    flushInitialRoot();
     component.lastUsedRoot = '/stored/root';
 
     // Act

@@ -253,8 +253,16 @@ class BuildRagIndexViewTests(SimpleTestCase):
             format="json",
         )
 
-        fake_progress = {"status": "running", "percent": 5, "message": "starting", "root": "/tmp/project"}
-        with patch("codeqa.views.start_build", return_value=SimpleNamespace(to_dict=lambda: fake_progress)) as start_build_mock:
+        fake_progress = {
+            "status": "running",
+            "percent": 5,
+            "message": "starting",
+            "root": "/tmp/project",
+        }
+        with patch(
+            "codeqa.views.start_build",
+            return_value=SimpleNamespace(to_dict=lambda: fake_progress),
+        ) as start_build_mock:
             # Act
             response = BuildRagIndexView.as_view()(request)
 
@@ -271,9 +279,17 @@ class BuildRagIndexViewTests(SimpleTestCase):
         request = self.factory.post("/api/code-qa/build-rag/", {}, format="json")
 
         default_root = get_default_root()
-        fake_progress = {"status": "running", "percent": 5, "message": "starting", "root": default_root}
+        fake_progress = {
+            "status": "running",
+            "percent": 5,
+            "message": "starting",
+            "root": default_root,
+        }
 
-        with patch("codeqa.views.start_build", return_value=SimpleNamespace(to_dict=lambda: fake_progress)) as start_build_mock:
+        with patch(
+            "codeqa.views.start_build",
+            return_value=SimpleNamespace(to_dict=lambda: fake_progress),
+        ) as start_build_mock:
             # Act
             response = BuildRagIndexView.as_view()(request)
 
