@@ -3,11 +3,11 @@ import { ChatPage } from '../support/pageObjects/ChatPage';
 import { GlobalSearch } from '../support/pageObjects/GlobalSearch';
 import { TopicsPanel } from '../support/pageObjects/TopicsPanel';
 import {
+  apiUrl,
   stubBuildRag,
   stubCreateTopic,
   stubSearch,
   stubStreamQuestion,
-  stubLastRagRoot,
   stubTopicDetail,
   stubTopicList,
 } from '../support/utils/apiStubs';
@@ -161,19 +161,43 @@ describe('AI Code Assistant app', () => {
   it('navigates to the Build RAG page and triggers an index build', () => {
     // Arrange
     stubTopicList([]);
-    stubLastRagRoot('/workspace/latest');
-    stubBuildRag();
+    let progressCall = 0;
+    cy.intercept('GET', `${apiUrl}/code-qa/build-rag/`, (req) => {
+      progressCall += 1;
+      if (progressCall === 1) {
+        req.reply({
+          root: '/workspace/latest',
+          progress: { status: 'running', percent: 40, message: 'Collecting code', root: '/workspace/latest' },
+        });
+        return;
+      }
+
+      req.reply({
+        root: '/workspace/latest',
+        progress: { status: 'completed', percent: 100, message: 'Terminé', root: '/workspace/latest' },
+      });
+    }).as('lastRagRoot');
+    stubBuildRag('buildRag', {
+      status: 'running',
+      percent: 55,
+      message: 'Embedding content',
+      root: '/workspace/project',
+    });
 
     // Act
     chatPage.visit();
     chatPage.clickBuildRagNav();
 
     const buildRagPage = new BuildRagPage();
-    buildRagPage.assertOnPage().expectRootValue('/workspace/latest');
+    buildRagPage.assertOnPage();
     cy.wait('@lastRagRoot');
+    buildRagPage.expectRootValue('/workspace/latest').expectProgress('Collecting code', 40);
 
     buildRagPage.clickRebuild();
     cy.wait('@buildRag').its('request.body').should('deep.equal', { root: '/workspace/latest' });
+
+    cy.wait('@lastRagRoot');
+    buildRagPage.expectProgress('Terminé', 100);
 
     buildRagPage.typeRootPath('/workspace/project').launchBuild();
 

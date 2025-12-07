@@ -28,4 +28,11 @@ export class BuildRagPage {
     cy.get('[data-cy="toast"]').should('be.visible').and('contain', text);
     return this;
   }
+
+  expectProgress(message: string, percent: number) {
+    cy.get('[data-cy="build-progress"]').should('be.visible');
+    cy.get('[data-cy="progress-message"]').should('contain', message);
+    cy.get('[data-cy="progress-percent"]').should('contain', `${percent}%`);
+    return this;
+  }
 }

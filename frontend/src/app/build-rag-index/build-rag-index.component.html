@@ -58,6 +58,40 @@
         </button>
       </form>
 
+      <section *ngIf="progress" class="rag-builder__progress" data-cy="build-progress">
+        <div class="rag-builder__progress__header">
+          <div class="rag-builder__progress__title">
+            <mat-icon aria-hidden="true">
+              {{ progress.status === 'running' ? 'sync' : progress.status === 'completed' ? 'check_circle' : 'info' }}
+            </mat-icon>
+            <div>
+              <p class="rag-builder__progress__message" data-cy="progress-message">{{ progress.message }}</p>
+              <p class="rag-builder__progress__root" *ngIf="progress.root">Chemin utilisé : {{ progress.root }}</p>
+            </div>
+          </div>
+          <span class="rag-builder__progress__value" data-cy="progress-percent">{{ progress.percent }}%</span>
+        </div>
+
+        <mat-progress-bar
+          mode="determinate"
+          color="primary"
+          [value]="progress.percent"
+          data-cy="progress-bar"
+        ></mat-progress-bar>
+
+        <div
+          class="rag-builder__progress__status"
+          [ngClass]="{
+            'rag-builder__progress__status--running': progress.status === 'running',
+            'rag-builder__progress__status--success': progress.status === 'completed',
+            'rag-builder__progress__status--error': progress.status === 'error'
+          }"
+        >
+          {{ progress.status === 'running' ? 'Construction en cours' : progress.status === 'completed' ? 'Terminé' :
+          progress.status === 'error' ? 'Erreur' : 'En attente' }}
+        </div>
+      </section>
+
       <div
         *ngIf="toast"
         class="toast"

@@ -66,14 +66,18 @@ export const stubStreamQuestion = (
   }).as(alias);
 };
 
-export const stubBuildRag = (alias = 'buildRag') => {
+export const stubBuildRag = (alias = 'buildRag', progress = { status: 'running', percent: 10, message: 'Starting', root: '' }) => {
   cy.intercept('POST', `${apiUrl}/code-qa/build-rag/`, (req) => {
-    req.reply({ statusCode: 200, body: {} });
+    req.reply({ statusCode: 200, body: { progress } });
   }).as(alias);
 };
 
-export const stubLastRagRoot = (root: string, alias = 'lastRagRoot') => {
-  cy.intercept('GET', `${apiUrl}/code-qa/build-rag/`, { root }).as(alias);
+export const stubLastRagRoot = (
+  root: string,
+  alias = 'lastRagRoot',
+  progress = { status: 'idle', percent: 0, message: 'En attente', root: null }
+) => {
+  cy.intercept('GET', `${apiUrl}/code-qa/build-rag/`, { root, progress }).as(alias);
 };
 
 export const stubSearch = (
