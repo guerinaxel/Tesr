@@ -266,7 +266,9 @@ export class ChatComponent implements OnInit {
 
   private scrollToBottom(force = false): void {
     const viewport = this.messagesViewport;
+    /* istanbul ignore next */
     if (!viewport) return;
+    /* istanbul ignore next */
     if (!force && !this.shouldStickToBottom) return;
     setTimeout(() => {
       viewport.scrollToIndex(this.messages().length, 'smooth');
@@ -443,6 +445,7 @@ export class ChatComponent implements OnInit {
       },
       error: () => {
         this.ragSources.set([]);
+        this.ragSourcesLoading.set(false);
       },
       complete: () => this.ragSourcesLoading.set(false),
     });
@@ -488,6 +491,7 @@ export class ChatComponent implements OnInit {
           err?.message ??
           'Impossible de créer la source RAG. Vérifiez les chemins fournis.';
         this.ragSourceError.set(detail);
+        this.ragSourcesLoading.set(false);
       },
       complete: () => this.ragSourcesLoading.set(false),
     });

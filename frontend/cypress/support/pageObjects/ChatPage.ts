@@ -63,6 +63,23 @@ export class ChatPage {
     return this;
   }
 
+  openBuildForm() {
+    cy.get('[data-cy="toggle-build-source"]').click();
+    return this;
+  }
+
+  fillBuildForm(name: string, description: string, paths: string) {
+    cy.get('[data-cy="build-source-name"]').clear({ force: true }).type(name, { force: true });
+    cy.get('[data-cy="build-source-description"]').clear({ force: true }).type(description, { force: true });
+    cy.get('[data-cy="build-source-paths"]').clear({ force: true }).type(paths, { force: true });
+    return this;
+  }
+
+  submitBuildForm() {
+    cy.get('[data-cy="submit-build-source"]').click();
+    return this;
+  }
+
   typeCustomPrompt(prompt: string) {
     cy.get('[data-cy="custom-prompt-input"]').should('be.visible').type(prompt);
     return this;

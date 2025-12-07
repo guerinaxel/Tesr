@@ -128,6 +128,30 @@ describe('ChatComponent', () => {
     );
   }));
 
+  it('replaces existing topic entries when auto-creating with the same id', fakeAsync(() => {
+    // Arrange
+    component.topics.set([{ id: 6, name: 'Stale', message_count: 2 }]);
+    component.selectedTopicId.set(null);
+    component.question.set('New topic with same id');
+
+    chatDataService.createTopic.and.returnValue(
+      of({ id: 6, name: 'Fresh', message_count: 0, messages: [], next_offset: null })
+    );
+    chatDataService.streamQuestion.and.returnValue(
+      of({ event: 'done', data: { answer: 'ok' } } as StreamChunk)
+    );
+    chatDataService.getTopicDetail.and.returnValue(
+      of({ id: 6, name: 'Fresh', message_count: 1, messages: [], next_offset: null })
+    );
+
+    // Act
+    component.onSubmit();
+    tick(200);
+
+    // Assert
+    expect(component.topics()[0]).toEqual(jasmine.objectContaining({ id: 6, name: 'Fresh' }));
+  }));
+
   it('keeps streamed partial tokens when the done payload is empty', fakeAsync(() => {
     component.question.set('Partial');
 
@@ -319,6 +343,22 @@ describe('ChatComponent', () => {
     );
   });
 
+  it('blocks sending when no RAG sources are selected', () => {
+    // Arrange
+    component.selectedSources.set([]);
+    component.question.set('Do not send');
+
+    // Act
+    component.onSubmit();
+
+    // Assert
+    expect(chatDataService.streamQuestion).not.toHaveBeenCalled();
+    const lastMessage = component.messages()[component.messages().length - 1];
+    expect(lastMessage?.isError).toBeTrue();
+    expect(lastMessage?.content).toContain('Sélectionnez au moins une source');
+    expect(component.isSending()).toBeFalse();
+  });
+
   it('does not send the message when pressing space without modifiers', () => {
     // Arrange
     component.question.set('Should stay');
@@ -373,6 +413,53 @@ describe('ChatComponent', () => {
     expect(component.isSending()).toBeFalse();
   });
 
+  it('opens and closes the topic search panel', () => {
+    // Arrange
+    component.isTopicSearchVisible.set(true);
+    component.topicSearchQuery.set('abc');
+    component.topicSearchResults.set([{ id: 99, name: 'Tmp', message_count: 0 }]);
+
+    // Act
+    component.closeTopicSearch();
+
+    // Assert
+    expect(component.isTopicSearchVisible()).toBeFalse();
+    expect(component.topicSearchQuery()).toBe('');
+    expect(component.topicSearchResults()).toEqual([]);
+  });
+
+  it('performs topic search and populates results', fakeAsync(() => {
+    // Arrange
+    chatDataService.searchEverything.and.returnValue(
+      of({
+        topics: { items: [{ id: 3, name: 'Found', message_count: 1 }], next_offset: null },
+        questions: { items: [], next_offset: null },
+        answers: { items: [], next_offset: null },
+      })
+    );
+
+    // Act
+    component.onTopicSearchChange('Found');
+    tick(500);
+
+    // Assert
+    expect(component.topicSearchResults()[0].name).toBe('Found');
+    expect(component.topicSearchLoading()).toBeFalse();
+  }));
+
+  it('clears topic search results when lookup fails', fakeAsync(() => {
+    // Arrange
+    chatDataService.searchEverything.and.returnValue(throwError(() => new Error('fail')));
+
+    // Act
+    component.onTopicSearchChange('Fail');
+    tick(500);
+
+    // Assert
+    expect(component.topicSearchResults()).toEqual([]);
+    expect(component.topicSearchLoading()).toBeFalse();
+  }));
+
   it('does not send a request for blank input', () => {
     // Arrange
     component.question.set('   ');
@@ -425,6 +512,28 @@ describe('ChatComponent', () => {
     expect(lastMessage?.isError).toBeTrue();
     expect(lastMessage?.content).toContain('Topic creation failed');
     expect(component.isSending()).toBeFalse();
+  }));
+
+  it('captures meta contexts to infer used source names', fakeAsync(() => {
+    // Arrange
+    component.question.set('Meta please');
+
+    chatDataService.streamQuestion.and.returnValue(
+      of(
+        { event: 'meta', data: { contexts: [{ source_name: 'Docs' }, { source_name: 'API' }] } } as StreamChunk,
+        { event: 'done', data: { answer: 'ok' } } as StreamChunk
+      )
+    );
+    chatDataService.getTopicDetail.and.returnValue(
+      of({ id: 1, name: 'Default', message_count: 1, messages: [], next_offset: null })
+    );
+
+    // Act
+    component.onSubmit();
+    tick(200);
+
+    // Assert
+    expect(component.lastSourcesUsed()).toEqual(['Docs', 'API']);
   }));
 
   it('creates a new topic and loads it', () => {
@@ -745,6 +854,17 @@ describe('ChatComponent', () => {
     expect((component as any).shouldStickToBottom).toBeTrue();
   });
 
+  it('does not scroll when no viewport is attached', () => {
+    // Arrange
+    (component as any).messagesViewport = undefined;
+
+    // Act
+    (component as any).scrollToBottom();
+
+    // Assert
+    expect(component.messages().length).toBe(0);
+  });
+
   it('handles topic load failures gracefully', () => {
     // Arrange
     component.topics.set([
@@ -1010,12 +1130,13 @@ describe('ChatComponent', () => {
     expect(ragSourceService.buildSource).not.toHaveBeenCalled();
   });
 
-  it('captures build errors and keeps the form open', fakeAsync(() => {
-    // Arrange
-    component.buildSourceName.set('Docs');
-    component.buildSourceDescription.set('Docs portal');
-    component.buildSourcePaths.set('/tmp/docs');
-    ragSourceService.buildSource.and.returnValue(throwError(() => new Error('fail')));
+    it('captures build errors and keeps the form open', fakeAsync(() => {
+      // Arrange
+      component.buildSourceName.set('Docs');
+      component.buildSourceDescription.set('Docs portal');
+      component.buildSourcePaths.set('/tmp/docs');
+      component.isBuildFormOpen.set(true);
+      ragSourceService.buildSource.and.returnValue(throwError(() => new Error('fail')));
 
     // Act
     component.buildNewSource();

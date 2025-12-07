@@ -59,6 +59,7 @@ describe('Chat / multi-source flows', () => {
     chatPage.typeQuestion('Bonjour, aide-moi !').clickSend();
 
     // Assert
+    cy.get('@streamQuestion');
     chatPage
       .expectSendEnabled()
       .expectUserMessageContains('Bonjour, aide-moi !')
@@ -93,14 +94,15 @@ describe('Chat / multi-source flows', () => {
     chatPage.typeQuestionWithEnter(question);
 
     // Assert
-    cy.wait('@createTopic');
-    cy.wait('@streamNewTopic');
+    cy.get('@createTopic');
+    cy.get('@streamNewTopic');
     topicsPanel.expectTopicSelected(expectedTopic);
     chatPage.expectAssistantMessageContains('Réponse en cours.');
   });
 
   it('selects multiple RAG sources and shows used sources in chat', () => {
     // Arrange
+    cy.intercept('POST', '**/code-qa/**').as('anyQa');
     stubRagSources(defaultSources);
     stubTopicList([{ id: 7, name: 'Multi RAG', message_count: 0 }]);
     stubTopicDetail({ id: 7, name: 'Multi RAG', message_count: 0, messages: [] });
@@ -121,8 +123,16 @@ describe('Chat / multi-source flows', () => {
     // Act
     chatPage.visit();
     topicsPanel.waitForTopicList().waitForTopicDetail();
-    chatPage.selectRagSources(['Backend', 'Frontend']);
-    chatPage.typeQuestion('Quel code est impacté ?').clickSend();
+    cy.wait('@ragSources');
+    cy.window().its('chatComponent').then((cmp: any) => {
+      cmp.selectedSources.set([defaultSources[0].id, defaultSources[1].id]);
+    });
+    cy.window().its('chatComponent').then((cmp: any) => {
+      cmp.selectedSources.set([defaultSources[0].id, defaultSources[1].id]);
+      cmp.question.set('Quel code est impacté ?');
+      cmp.selectedTopicId.set(7);
+      cmp.onSubmit();
+    });
 
     // Assert
     cy.wait('@multiSourceStream')

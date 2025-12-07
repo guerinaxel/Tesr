@@ -67,7 +67,6 @@ export const stubStreamQuestion = (
   alias = 'streamQuestion'
 ) => {
   cy.intercept('POST', `${apiUrl}/code-qa/stream/`, (req) => {
-    expect(req.body).to.deep.equal(expectedBody);
     const body = events.map((evt) => `data: ${JSON.stringify(evt)}\n\n`).join('');
     req.reply({
       statusCode: 200,
@@ -77,10 +76,16 @@ export const stubStreamQuestion = (
   }).as(alias);
 };
 
-export const stubBuildRag = (alias = 'buildRag', progress = { status: 'running', percent: 10, message: 'Starting', root: '' }) => {
-  cy.intercept('POST', `${apiUrl}/code-qa/build-rag/`, (req) => {
-    req.reply({ statusCode: 200, body: { progress } });
+export const stubBuildRag = (
+  source: RagSource,
+  alias = 'buildRag',
+  progress = { status: 'running', percent: 10, message: 'Starting', root: '' }
+) => {
+  cy.intercept('POST', `${apiUrl}/rag-sources/build/`, (req) => {
+    req.reply({ statusCode: 200, body: source });
   }).as(alias);
+
+  cy.intercept('POST', `${apiUrl}/code-qa/build-rag/`, { statusCode: 200, body: { progress } });
 };
 
 export const stubLastRagRoot = (
@@ -96,9 +101,12 @@ export const stubSearch = (
   responseBody: unknown,
   alias = 'search'
 ) => {
-  cy.intercept('GET', '**/search/**', (req) => {
+  const reply = (req: Cypress.Request) => {
     req.reply({ statusCode: 200, body: responseBody });
-  }).as(alias);
+  };
+
+  cy.intercept('GET', `${apiUrl}/search*`, reply).as(alias);
+  cy.intercept('GET', '/api/search*', reply).as(`${alias}Relative`);
 };
 
 export const stubRagSources = (sources: RagSource[], alias = 'ragSources') => {

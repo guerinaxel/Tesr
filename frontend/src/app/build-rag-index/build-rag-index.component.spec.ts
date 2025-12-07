@@ -44,6 +44,16 @@ describe('BuildRagIndexComponent', () => {
     expect(component.lastUsedRoot).toBe('/workspace/default');
   });
 
+  it('surfaces an error toast when initial state retrieval fails', () => {
+    // Arrange & Act handled in setup
+    const initReq = httpMock.expectOne(`${environment.apiUrl}/code-qa/build-rag/`);
+    initReq.flush({ detail: 'nope' }, { status: 500, statusText: 'fail' });
+
+    // Assert
+    expect(component.toast).toEqual(jasmine.objectContaining({ type: 'error' }));
+    expect(component.isLoadingRoot).toBeFalse();
+  });
+
   it('sends the root value to the backend and shows a success toast', () => {
     // Arrange
     flushInitialRoot();
@@ -119,6 +129,51 @@ describe('BuildRagIndexComponent', () => {
 
     expect(component.root).toBe('/stored/root');
     expect(component.lastUsedRoot).toBe('/stored/root');
+  });
+
+  it('rebuilds using the current root when no last value exists', () => {
+    // Arrange
+    flushInitialRoot(null, { status: 'idle', percent: 0, message: 'idle', root: null });
+    component.root = '  /tmp/trim  ';
+
+    // Act
+    component.onRebuild();
+
+    // Assert
+    const request = httpMock.expectOne(`${environment.apiUrl}/code-qa/build-rag/`);
+    expect(request.request.body).toEqual({ root: '/tmp/trim' });
+    request.flush({ detail: 'ok', root: null, progress: { status: 'running', percent: 5, message: 'start', root: null } });
+    expect(component.lastUsedRoot).toBe('/tmp/trim');
+  });
+
+  it('stores trimmed roots when responses omit a value', () => {
+    // Arrange
+    flushInitialRoot();
+    component.root = '  /workspace/missing ';
+
+    // Act
+    component.onSubmit();
+
+    const req = httpMock.expectOne(`${environment.apiUrl}/code-qa/build-rag/`);
+    req.flush({ detail: 'ok', root: null, progress: { status: 'running', percent: 20, message: 'start', root: null } });
+
+    // Assert
+    expect(component.lastUsedRoot).toBe('/workspace/missing');
+    expect(component.root).toBe('/workspace/missing');
+  });
+
+  it('handles blank roots by passing null payloads', () => {
+    // Arrange
+    flushInitialRoot(null, { status: 'idle', percent: 0, message: 'idle', root: null });
+    component.root = '   ';
+
+    // Act
+    component.onSubmit();
+
+    const req = httpMock.expectOne(`${environment.apiUrl}/code-qa/build-rag/`);
+    expect(req.request.body).toEqual({ root: null });
+    req.flush({ detail: 'ok', root: null, progress: { status: 'completed', percent: 100, message: 'done', root: null } });
+    expect(component.lastUsedRoot).toBeNull();
   });
 
   it('displays and refreshes build progress while running', fakeAsync(() => {

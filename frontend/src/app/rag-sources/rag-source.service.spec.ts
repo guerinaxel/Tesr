@@ -80,13 +80,24 @@ describe('RagSourceService', () => {
 
     // Act
     service.queryRag('Hello?', ['source-1', 'source-2'], extra).subscribe((response: CodeQaResponse) => {
-      expect(response).toEqual({ answer: 'Hi', sources_used: [] });
+      expect(response).toEqual({ answer: 'Hi', meta: { sources_used: [] } });
     });
 
     // Assert
     const req = httpMock.expectOne(`${environment.apiUrl}/code-qa/`);
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({ question: 'Hello?', sources: ['source-1', 'source-2'], ...extra });
-    req.flush({ answer: 'Hi', sources_used: [] });
+    req.flush({ answer: 'Hi', meta: { sources_used: [] } });
+  });
+
+  it('queries the RAG endpoint with default extras', () => {
+    // Act
+    service.queryRag('Default', ['only']).subscribe();
+
+    // Assert
+    const req = httpMock.expectOne(`${environment.apiUrl}/code-qa/`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ question: 'Default', sources: ['only'] });
+    req.flush({ answer: 'ok' });
   });
 });

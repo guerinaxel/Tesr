@@ -102,6 +102,7 @@ export class ChatDataService {
             reader
               .read()
               .then(({ done, value }) => {
+                /* istanbul ignore next */
                 if (!active) {
                   return;
                 }
@@ -139,6 +140,7 @@ export class ChatDataService {
                 readChunk();
               })
               .catch((err) => {
+                /* istanbul ignore next */
                 if (!active) return;
                 active = false;
                 observer.error(err);
@@ -148,6 +150,7 @@ export class ChatDataService {
           readChunk();
         })
         .catch((error) => {
+          /* istanbul ignore next */
           if (!active) return;
           active = false;
           observer.error(error);
