@@ -54,3 +54,65 @@ mat-card-subtitle {
   height: 20px;
   width: 20px;
 }
+
+.rag-builder__progress {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--mat-sys-primary) 25%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--mat-sys-primary-container) 30%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.rag-builder__progress__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.rag-builder__progress__title {
+  display: inline-flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.rag-builder__progress__message {
+  margin: 0;
+  font-weight: 600;
+}
+
+.rag-builder__progress__root {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.9rem;
+}
+
+.rag-builder__progress__value {
+  font-weight: 700;
+  font-size: 1.25rem;
+  min-width: 3.5rem;
+  text-align: right;
+}
+
+.rag-builder__progress__status {
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.rag-builder__progress__status--running {
+  color: var(--mat-sys-primary);
+}
+
+.rag-builder__progress__status--success {
+  color: var(--mat-sys-primary);
+}
+
+.rag-builder__progress__status--error {
+  color: var(--mat-sys-error);
+}

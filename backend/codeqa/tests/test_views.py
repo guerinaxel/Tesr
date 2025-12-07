@@ -39,6 +39,7 @@ from codeqa import rag_index as rag_index_module  # noqa: E402
 importlib.reload(rag_index_module)
 from codeqa import rag_service as rag_service_module  # noqa: E402
 importlib.reload(rag_service_module)
+from codeqa.build_runner import BuildInProgressError  # noqa: E402
 from codeqa.rag_state import get_default_root, load_last_root, save_last_root  # noqa: E402
 from codeqa.models import Message, Topic  # noqa: E402
 from codeqa.views import (  # noqa: E402
@@ -252,72 +253,79 @@ class BuildRagIndexViewTests(SimpleTestCase):
             format="json",
         )
 
-        with patch("codeqa.views.call_command") as mock_call_command:
+        fake_progress = {"status": "running", "percent": 5, "message": "starting", "root": "/tmp/project"}
+        with patch("codeqa.views.start_build", return_value=SimpleNamespace(to_dict=lambda: fake_progress)) as start_build_mock:
             # Act
             response = BuildRagIndexView.as_view()(request)
 
         # Assert
         self.assertEqual(status.HTTP_200_OK, response.status_code)
-        args, kwargs = mock_call_command.call_args
-        self.assertEqual("build_rag_index", args[0])
+        start_build_mock.assert_called_once()
         expected_root = str(Path("/tmp/project").resolve())
-        self.assertEqual(expected_root, kwargs["root"])
-        self.assertIn("stdout", kwargs)
-        self.assertIn("stderr", kwargs)
         self.assertEqual(expected_root, response.data["root"])
+        self.assertEqual(fake_progress, response.data["progress"])
         self.assertEqual(expected_root, load_last_root())
 
     def test_defaults_root_when_missing(self) -> None:
         # Arrange
         request = self.factory.post("/api/code-qa/build-rag/", {}, format="json")
 
-        with patch("codeqa.views.call_command") as mock_call_command:
+        default_root = get_default_root()
+        fake_progress = {"status": "running", "percent": 5, "message": "starting", "root": default_root}
+
+        with patch("codeqa.views.start_build", return_value=SimpleNamespace(to_dict=lambda: fake_progress)) as start_build_mock:
             # Act
             response = BuildRagIndexView.as_view()(request)
 
         # Assert
         self.assertEqual(status.HTTP_200_OK, response.status_code)
-        _args, kwargs = mock_call_command.call_args
-        self.assertNotIn("root", kwargs)
-        self.assertEqual(get_default_root(), response.data["root"])
-        self.assertEqual(get_default_root(), load_last_root())
+        start_build_mock.assert_called_once()
+        args, _kwargs = start_build_mock.call_args
+        self.assertEqual(Path(default_root), args[0])
+        self.assertEqual(default_root, response.data["root"])
+        self.assertEqual(default_root, load_last_root())
 
-    def test_returns_error_on_failure(self) -> None:
+    def test_returns_conflict_when_build_running(self) -> None:
         # Arrange
         request = self.factory.post("/api/code-qa/build-rag/", {}, format="json")
 
-        with patch("codeqa.views.call_command", side_effect=RuntimeError("boom")):
+        with patch("codeqa.views.start_build", side_effect=BuildInProgressError("busy")):
             # Act
             response = BuildRagIndexView.as_view()(request)
 
         # Assert
-        self.assertEqual(status.HTTP_500_INTERNAL_SERVER_ERROR, response.status_code)
-        self.assertIn("detail", response.data)
+        self.assertEqual(status.HTTP_409_CONFLICT, response.status_code)
+        self.assertEqual("busy", response.data["detail"])
 
-    def test_get_returns_last_used_root(self) -> None:
+    def test_get_returns_root_and_progress(self) -> None:
         # Arrange
         stored_root = str(Path(self.tmpdir.name) / "project")
         save_last_root(stored_root)
-
+        fake_progress = {"status": "running", "percent": 50, "message": "working", "root": stored_root}
         request = self.factory.get("/api/code-qa/build-rag/")
 
-        # Act
-        response = BuildRagIndexView.as_view()(request)
+        with patch("codeqa.views.get_progress", return_value=SimpleNamespace(to_dict=lambda: fake_progress)):
+            # Act
+            response = BuildRagIndexView.as_view()(request)
 
         # Assert
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertEqual(stored_root, response.data["root"])
+        self.assertEqual(fake_progress, response.data["progress"])
 
     def test_get_returns_default_when_state_missing(self) -> None:
         # Arrange
         request = self.factory.get("/api/code-qa/build-rag/")
+        fake_progress = {"status": "idle", "percent": 0, "message": "waiting", "root": None}
 
-        # Act
-        response = BuildRagIndexView.as_view()(request)
+        with patch("codeqa.views.get_progress", return_value=SimpleNamespace(to_dict=lambda: fake_progress)):
+            # Act
+            response = BuildRagIndexView.as_view()(request)
 
         # Assert
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertEqual(get_default_root(), response.data["root"])
+        self.assertEqual(fake_progress, response.data["progress"])
 
 
 class TopicViewsTests(TestCase):

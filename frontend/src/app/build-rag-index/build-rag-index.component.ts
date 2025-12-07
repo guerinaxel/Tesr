@@ -8,10 +8,20 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 
 import { environment } from '../../environments/environment';
 
 type ToastType = 'success' | 'error';
+
+type BuildStatus = 'idle' | 'running' | 'completed' | 'error';
+
+interface BuildProgress {
+  status: BuildStatus;
+  percent: number;
+  message: string;
+  root: string | null;
+}
 
 interface ToastState {
   message: string;
@@ -29,6 +39,7 @@ interface ToastState {
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
+    MatProgressBarModule,
     MatProgressSpinnerModule,
   ],
   templateUrl: './build-rag-index.component.html',
@@ -42,26 +53,14 @@ export class BuildRagIndexComponent implements OnInit, OnDestroy {
   isSubmitting = false;
   isLoadingRoot = false;
   toast: ToastState | null = null;
+  progress: BuildProgress | null = null;
+  readonly pollIntervalMs = 1500;
 
   private toastTimer?: ReturnType<typeof setTimeout>;
+  private pollTimer?: ReturnType<typeof setInterval>;
 
   ngOnInit(): void {
-    this.isLoadingRoot = true;
-    this.http.get<{ root: string | null }>(`${environment.apiUrl}/code-qa/build-rag/`).subscribe({
-      next: ({ root }) => {
-        if (root) {
-          this.root = root;
-          this.lastUsedRoot = root;
-        }
-      },
-      error: () => {
-        this.showToast('Impossible de récupérer le dernier chemin utilisé.', 'error');
-        this.isLoadingRoot = false;
-      },
-      complete: () => {
-        this.isLoadingRoot = false;
-      },
-    });
+    this.fetchState();
   }
 
   onSubmit(): void {
@@ -85,7 +84,7 @@ export class BuildRagIndexComponent implements OnInit, OnDestroy {
     const payload = { root: trimmedRoot || null };
 
     this.http
-      .post<{ detail: string; root: string | null }>(`${environment.apiUrl}/code-qa/build-rag/`, payload)
+      .post<{ detail: string; root: string | null; progress: BuildProgress }>(`${environment.apiUrl}/code-qa/build-rag/`, payload)
       .subscribe({
         next: (response) => {
           this.isSubmitting = false;
@@ -94,19 +93,78 @@ export class BuildRagIndexComponent implements OnInit, OnDestroy {
             this.lastUsedRoot = usedRoot;
             this.root = usedRoot;
           }
+          this.applyProgress(response.progress);
           this.showToast('RAG index build triggered.', 'success');
         },
         error: (err) => {
           this.isSubmitting = false;
           const message =
             err?.error?.detail ?? 'Failed to trigger the RAG index build.';
+          if (err?.error?.progress) {
+            this.applyProgress(err.error.progress);
+          }
           this.showToast(message, 'error');
         },
       });
   }
 
   ngOnDestroy(): void {
+    this.stopProgressPolling();
     this.clearToastTimer();
+  }
+
+  private fetchState(): void {
+    this.isLoadingRoot = true;
+    this.http
+      .get<{ root: string | null; progress: BuildProgress }>(`${environment.apiUrl}/code-qa/build-rag/`)
+      .subscribe({
+        next: ({ root, progress }) => {
+          if (root) {
+            this.root = root;
+            this.lastUsedRoot = root;
+          }
+          this.applyProgress(progress);
+        },
+        error: () => {
+          this.showToast('Impossible de récupérer le dernier chemin utilisé.', 'error');
+        },
+        complete: () => {
+          this.isLoadingRoot = false;
+        },
+      });
+  }
+
+  private refreshProgress(): void {
+    this.http
+      .get<{ progress: BuildProgress }>(`${environment.apiUrl}/code-qa/build-rag/`)
+      .subscribe({
+        next: ({ progress }) => this.applyProgress(progress),
+        error: () => this.stopProgressPolling(),
+      });
+  }
+
+  private applyProgress(progress: BuildProgress | null): void {
+    this.progress = progress;
+    if (progress?.status === 'running') {
+      this.startProgressPolling();
+    } else {
+      this.stopProgressPolling();
+    }
+  }
+
+  private startProgressPolling(): void {
+    if (this.pollTimer) {
+      return;
+    }
+
+    this.pollTimer = setInterval(() => this.refreshProgress(), this.pollIntervalMs);
+  }
+
+  private stopProgressPolling(): void {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = undefined;
+    }
   }
 
   private showToast(message: string, type: ToastType): void {

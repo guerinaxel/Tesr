@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import inspect
 import json
-from io import StringIO
 from pathlib import Path
 from typing import Any, Iterable
 
 from django.http import HttpRequest, StreamingHttpResponse
-from django.core.management import call_command
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -21,6 +19,7 @@ from .document_service import (
     categorize_document,
     summarize_content,
 )
+from .build_runner import BuildInProgressError, get_progress, start_build
 from .rag_state import get_default_root, load_last_root, save_last_root
 from .models import Message, Topic
 from .serializers import (
@@ -401,7 +400,10 @@ class BuildRagIndexView(APIView):
     """Trigger rebuilding the RAG index via the management command."""
 
     def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> Response:
-        return Response({"root": load_last_root()}, status=status.HTTP_200_OK)
+        return Response(
+            {"root": load_last_root(), "progress": get_progress().to_dict()},
+            status=status.HTTP_200_OK,
+        )
 
     def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> Response:
         serializer = BuildRagRequestSerializer(data=request.data)
@@ -410,30 +412,26 @@ class BuildRagIndexView(APIView):
         raw_root = serializer.validated_data.get("root") or None
         root = raw_root.strip() if isinstance(raw_root, str) else None
         resolved_root = Path(root or get_default_root()).resolve()
-        stdout, stderr = StringIO(), StringIO()
+        save_last_root(str(resolved_root))
 
         try:
-            command_kwargs: dict[str, Any] = {"stdout": stdout, "stderr": stderr}
-            if root:
-                command_kwargs["root"] = str(resolved_root)
-
-            call_command("build_rag_index", **command_kwargs)
-        except Exception:
+            progress = start_build(resolved_root)
+        except BuildInProgressError as exc:
             return Response(
-                {
-                    "detail": "Failed to build RAG index.",
-                    "errors": stderr.getvalue(),
-                },
+                {"detail": str(exc), "progress": get_progress().to_dict()},
+                status=status.HTTP_409_CONFLICT,
+            )
+        except Exception:  # pragma: no cover - defensive path
+            return Response(
+                {"detail": "Failed to build RAG index."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        save_last_root(str(resolved_root))
         return Response(
             {
                 "detail": "RAG index build triggered.",
                 "root": str(resolved_root),
-                "output": stdout.getvalue(),
-                "errors": stderr.getvalue(),
+                "progress": progress.to_dict(),
             },
             status=status.HTTP_200_OK,
         )
