@@ -74,6 +74,7 @@ export class ChatDataService {
   streamQuestion(payload: CodeQaPayload): Observable<StreamChunk> {
     return new Observable<StreamChunk>((observer) => {
       const controller = new AbortController();
+      let active = true;
 
       fetch(`${this.apiUrl}/code-qa/stream/`, {
         method: 'POST',
@@ -84,6 +85,7 @@ export class ChatDataService {
         .then((response) => {
           const reader = response.body?.getReader();
           if (!reader) {
+            active = false;
             observer.error('Streaming not supported by the server response.');
             return;
           }
@@ -92,10 +94,19 @@ export class ChatDataService {
           let buffer = '';
 
           const readChunk = (): void => {
+            if (!active) {
+              return;
+            }
+
             reader
               .read()
               .then(({ done, value }) => {
+                if (!active) {
+                  return;
+                }
+
                 if (done) {
+                  active = false;
                   observer.complete();
                   return;
                 }
@@ -113,7 +124,10 @@ export class ChatDataService {
                       try {
                         observer.next(JSON.parse(payloadText));
                       } catch (error) {
+                        active = false;
                         observer.error(error);
+                        controller.abort();
+                        return;
                       }
                     }
                   }
@@ -123,14 +137,25 @@ export class ChatDataService {
 
                 readChunk();
               })
-              .catch((err) => observer.error(err));
+              .catch((err) => {
+                if (!active) return;
+                active = false;
+                observer.error(err);
+              });
           };
 
           readChunk();
         })
-        .catch((error) => observer.error(error));
+        .catch((error) => {
+          if (!active) return;
+          active = false;
+          observer.error(error);
+        });
 
-      return () => controller.abort();
+      return () => {
+        active = false;
+        controller.abort();
+      };
     });
   }
 
