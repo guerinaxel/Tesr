@@ -295,6 +295,19 @@ describe('ChatComponent', () => {
     expect(chatDataService.streamQuestion).not.toHaveBeenCalled();
   });
 
+  it('builds topic names for blank and long inputs', () => {
+    // Arrange & Act
+    const blankName = (component as any).buildTopicName('   ');
+    const longName = (component as any).buildTopicName(
+      'This is a very long question that certainly exceeds the maximum topic name length that we want to allow in the UI.'
+    );
+
+    // Assert
+    expect(blankName).toBe('Nouvelle conversation');
+    expect(longName.endsWith('…')).toBeTrue();
+    expect(longName.length).toBe(60);
+  });
+
   it('does not send when custom prompt is missing', () => {
     // Arrange
     component.question.set('Should block');
@@ -339,6 +352,28 @@ describe('ChatComponent', () => {
     expect(errorMessage?.isError).toBeTrue();
     expect(errorMessage?.content).toContain('Service unavailable');
     tick(200);
+    expect(component.isSending()).toBeFalse();
+  }));
+
+  it('shows a topic creation error when auto-creation fails', fakeAsync(() => {
+    // Arrange
+    component.selectedTopicId.set(null);
+    component.topics.set([]);
+    component.question.set('Needs a topic');
+
+    chatDataService.createTopic.and.returnValue(
+      throwError(() => new Error('Topic creation failed'))
+    );
+
+    // Act
+    component.onSubmit();
+    tick(250);
+
+    // Assert
+    expect(chatDataService.streamQuestion).not.toHaveBeenCalled();
+    const lastMessage = component.messages()[component.messages().length - 1];
+    expect(lastMessage?.isError).toBeTrue();
+    expect(lastMessage?.content).toContain('Topic creation failed');
     expect(component.isSending()).toBeFalse();
   }));
 
@@ -646,6 +681,18 @@ describe('ChatComponent', () => {
       limit: 30,
     });
     expect(component.messages().length).toBe(3);
+  });
+
+  it('restores auto-scroll state when viewport is unavailable', () => {
+    // Arrange
+    (component as any).shouldStickToBottom = false;
+    (component as any).messagesViewport = undefined;
+
+    // Act
+    (component as any).updateAutoScrollState();
+
+    // Assert
+    expect((component as any).shouldStickToBottom).toBeTrue();
   });
 
   it('handles topic load failures gracefully', () => {
