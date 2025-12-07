@@ -978,4 +978,92 @@ describe('ChatComponent', () => {
     expect(component.ragSources()[0].total_files).toBe(3);
     expect(component.rebuildingSourceId()).toBeNull();
   }));
+
+  it('defaults selected sources when loading rag sources succeeds', fakeAsync(() => {
+    // Arrange
+    const ragSources = [
+      { id: 'source-1', name: 'Backend', description: '', path: '', created_at: '', total_files: 1, total_chunks: 1 },
+      { id: 'source-2', name: 'Frontend', description: '', path: '', created_at: '', total_files: 2, total_chunks: 3 },
+    ];
+    component.selectedSources.set([]);
+    ragSourceService.getSources.and.returnValue(of(ragSources));
+
+    // Act
+    component.loadRagSources();
+    tick();
+
+    // Assert
+    expect(component.ragSources()).toEqual(ragSources);
+    expect(component.selectedSources()).toEqual(['source-1', 'source-2']);
+    expect(component.ragSourcesLoading()).toBeFalse();
+  }));
+
+  it('stores an error when build form has no paths', () => {
+    // Arrange
+    component.buildSourcePaths.set('   ');
+
+    // Act
+    component.buildNewSource();
+
+    // Assert
+    expect(component.ragSourceError()).toContain('chemin');
+    expect(ragSourceService.buildSource).not.toHaveBeenCalled();
+  });
+
+  it('captures build errors and keeps the form open', fakeAsync(() => {
+    // Arrange
+    component.buildSourceName.set('Docs');
+    component.buildSourceDescription.set('Docs portal');
+    component.buildSourcePaths.set('/tmp/docs');
+    ragSourceService.buildSource.and.returnValue(throwError(() => new Error('fail')));
+
+    // Act
+    component.buildNewSource();
+    tick();
+
+    // Assert
+    expect(component.ragSourceError()).toContain('fail');
+    expect(component.isBuildFormOpen()).toBeTrue();
+    expect(component.ragSourcesLoading()).toBeFalse();
+  }));
+
+  it('blocks source edits when name is missing', () => {
+    // Arrange
+    component.editingSourceId.set('source-1');
+    component.editSourceName.set('   ');
+
+    // Act
+    component.saveSourceEdits();
+
+    // Assert
+    expect(component.editSourceError()).toContain('nom');
+    expect(ragSourceService.updateSource).not.toHaveBeenCalled();
+  });
+
+  it('records rebuild errors when paths are missing', () => {
+    // Arrange
+    component.rebuildingSourceId.set('source-5');
+    component.rebuildSourcePaths.set('   ');
+
+    // Act
+    component.rebuildSource();
+
+    // Assert
+    expect(component.rebuildSourceError()).toContain('chemin');
+    expect(ragSourceService.rebuildSource).not.toHaveBeenCalled();
+  });
+
+  it('handles load failures by clearing sources', fakeAsync(() => {
+    // Arrange
+    ragSourceService.getSources.and.returnValue(throwError(() => new Error('oops')));
+    component.ragSources.set([{ id: 'x', name: 'Temp', description: '', path: '', created_at: '', total_files: 0, total_chunks: 0 }]);
+
+    // Act
+    component.loadRagSources();
+    tick();
+
+    // Assert
+    expect(component.ragSources()).toEqual([]);
+    expect(component.ragSourcesLoading()).toBeFalse();
+  }));
 });
