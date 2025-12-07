@@ -25,6 +25,7 @@ from .document_service import (
     summarize_content,
 )
 from .build_runner import BuildInProgressError, get_progress, start_build
+from .code_extractor import collect_code_chunks, iter_text_files
 from .rag_state import get_default_root, load_last_root, save_last_root
 from .models import Message, Topic
 from .serializers import (
@@ -110,14 +111,8 @@ class CodeQAView(APIView):
             "system_prompt": system_prompt,
             "custom_prompt": custom_prompt or typo_prompt,
             "sources": sources,
+            "fusion_weight": fusion_weight,
         }
-
-        signature = inspect.signature(rag_service.answer_question)
-        if "fusion_weight" in signature.parameters or any(
-            param.kind == inspect.Parameter.VAR_KEYWORD
-            for param in signature.parameters.values()
-        ):
-            answer_kwargs["fusion_weight"] = fusion_weight
 
         try:
             answer, meta = rag_query_service.answer(**answer_kwargs)
@@ -179,10 +174,10 @@ class CodeQAStreamView(APIView):
             meta, token_stream = rag_query_service.stream(
                 question=question,
                 top_k=top_k,
-                fusion_weight=fusion_weight,
                 system_prompt=system_prompt,
                 custom_prompt=custom_prompt or typo_prompt,
                 sources=sources,
+                fusion_weight=fusion_weight,
             )
         except DomainError as exc:
             return _handle_domain_error(exc)
@@ -495,7 +490,13 @@ class RagSourceBuildView(APIView):
         description = serializer.validated_data.get("description")
 
         try:
-            source = rag_source_service.build_source(name=name, description=description, paths=paths)
+            source = rag_source_service.build_source(
+                name=name,
+                description=description,
+                paths=paths,
+                collect_code_chunks_fn=collect_code_chunks,
+                iter_text_files_fn=iter_text_files,
+            )
         except DomainError as exc:
             return _handle_domain_error(exc)
 
@@ -546,6 +547,8 @@ class RagSourceRebuildView(APIView):
                 name=name,
                 description=description,
                 paths=paths,
+                collect_code_chunks_fn=collect_code_chunks,
+                iter_text_files_fn=iter_text_files,
             )
         except DomainError as exc:
             return _handle_domain_error(exc)

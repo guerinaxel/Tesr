@@ -4,13 +4,13 @@ import json
 import shutil
 from collections import Counter
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 from asgiref.sync import sync_to_async
 
-from ..code_extractor import collect_code_chunks, iter_text_files
+from ..code_extractor import collect_code_chunks as default_collect_code_chunks, iter_text_files as default_iter_text_files
 from ..models import RagSource
-from ..rag_service import RagIndex, _build_config_from_env, _rag_sources_base_dir, drop_cached_source
+from .. import rag_service as rag_service_module
 from .errors import RagSourceBuildError, RagSourceNotFoundError, RagSourcePathMissingError
 
 
@@ -26,8 +26,17 @@ class RagSourceService:
         paths: list[str],
         name: str | None = None,
         description: str | None = None,
+        collect_code_chunks_fn: Callable[[Path], list[str]] = default_collect_code_chunks,
+        iter_text_files_fn: Callable[[Path], Iterable[Path]] = default_iter_text_files,
     ) -> RagSource:
-        return self._build(paths=paths, name=name, description=description, existing=None)
+        return self._build(
+            paths=paths,
+            name=name,
+            description=description,
+            existing=None,
+            collect_code_chunks_fn=collect_code_chunks_fn,
+            iter_text_files_fn=iter_text_files_fn,
+        )
 
     def rebuild_source(
         self,
@@ -36,11 +45,20 @@ class RagSourceService:
         paths: list[str],
         name: str | None = None,
         description: str | None = None,
+        collect_code_chunks_fn: Callable[[Path], list[str]] = default_collect_code_chunks,
+        iter_text_files_fn: Callable[[Path], Iterable[Path]] = default_iter_text_files,
     ) -> RagSource:
         source = RagSource.objects.filter(id=source_id).first()
         if source is None:
             raise RagSourceNotFoundError()
-        return self._build(paths=paths, name=name, description=description, existing=source)
+        return self._build(
+            paths=paths,
+            name=name,
+            description=description,
+            existing=source,
+            collect_code_chunks_fn=collect_code_chunks_fn,
+            iter_text_files_fn=iter_text_files_fn,
+        )
 
     def update_metadata(
         self,
@@ -64,7 +82,7 @@ class RagSourceService:
         if updated_fields:
             source.save(update_fields=updated_fields)
             self._write_metadata_file(source)
-            drop_cached_source(str(source.id))
+            rag_service_module.drop_cached_source(str(source.id))
 
         return source
 
@@ -107,6 +125,8 @@ class RagSourceService:
         name: str | None,
         description: str | None,
         existing: RagSource | None,
+        collect_code_chunks_fn: Callable[[Path], list[str]],
+        iter_text_files_fn: Callable[[Path], Iterable[Path]],
     ) -> RagSource:
         resolved_paths = [Path(p).expanduser().resolve() for p in paths]
         counter: Counter[str] = Counter()
@@ -116,8 +136,8 @@ class RagSourceService:
         for path in resolved_paths:
             if not path.exists():
                 raise RagSourcePathMissingError(str(path))
-            chunks.extend(collect_code_chunks(path))
-            files_here = list(iter_text_files(path))
+            chunks.extend(collect_code_chunks_fn(path))
+            files_here = list(iter_text_files_fn(path))
             total_files += len(files_here)
             counter.update(f.suffix for f in files_here)
 
@@ -142,22 +162,23 @@ class RagSourceService:
             source.total_files = total_files
             source.total_chunks = total_chunks
 
-        base_dir = _rag_sources_base_dir() / str(source.id)
+        base_dir = rag_service_module._rag_sources_base_dir() / str(source.id)
         try:
             self._reset_base_dir(base_dir)
             source.path = str(base_dir)
             source.save(update_fields=["name", "description", "total_files", "total_chunks", "path"])
 
-            config = _build_config_from_env()
+            config = rag_service_module._build_config_from_env()
             config.index_path = base_dir / "rag_index.faiss"
             config.docs_path = base_dir / "docs.pkl"
             config.whoosh_index_dir = base_dir / "whoosh_index"
 
-            rag_index = RagIndex(config)
+            rag_index_cls = rag_service_module.RagIndex
+            rag_index = rag_index_cls(config)
             rag_index.build_from_texts(chunks)
 
             self._write_metadata_file(source)
-            drop_cached_source(str(source.id))
+            rag_service_module.drop_cached_source(str(source.id))
             return source
         except (RagSourcePathMissingError, RagSourceNotFoundError):
             raise
