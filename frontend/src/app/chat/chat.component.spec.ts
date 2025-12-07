@@ -77,6 +77,44 @@ describe('ChatComponent', () => {
     expect(component.isSending()).toBeFalse();
   }));
 
+  it('auto-creates a topic when none is selected before sending', fakeAsync(() => {
+    // Arrange
+    const longQuestion =
+      'Implementer une fonctionnalité complexe qui dépasse largement la limite de caractères habituelle pour le titre du topic.';
+    const normalized = longQuestion.trim().replace(/\s+/g, ' ');
+    const expectedName = normalized.slice(0, 59) + '…';
+
+    component.topics.set([]);
+    component.selectedTopicId.set(null);
+    component.question.set(longQuestion);
+
+    chatDataService.createTopic.and.returnValue(
+      of({ id: 5, name: expectedName, message_count: 0, messages: [], next_offset: null })
+    );
+    chatDataService.streamQuestion.and.returnValue(
+      of({ event: 'done', data: { answer: 'Topic ready' } } as StreamChunk)
+    );
+    chatDataService.getTopicDetail.and.returnValue(
+      of({ id: 5, name: expectedName, message_count: 1, messages: [], next_offset: null })
+    );
+
+    // Act
+    component.onSubmit();
+    tick(200);
+
+    // Assert
+    expect(chatDataService.createTopic).toHaveBeenCalledWith(expectedName);
+    expect(chatDataService.streamQuestion).toHaveBeenCalledWith({
+      question: longQuestion,
+      system_prompt: 'code expert',
+      topic_id: 5,
+    });
+    expect(component.selectedTopicId()).toBe(5);
+    expect(component.topics()[0]).toEqual(
+      jasmine.objectContaining({ id: 5, name: expectedName, message_count: 1 })
+    );
+  }));
+
   it('keeps streamed partial tokens when the done payload is empty', fakeAsync(() => {
     component.question.set('Partial');
 
@@ -119,6 +157,83 @@ describe('ChatComponent', () => {
     expect(assistant?.content).toContain('Upstream failure');
     tick(200);
     expect(component.isSending()).toBeFalse();
+  }));
+
+  it('submits when pressing Enter and ignores Shift+Enter', () => {
+    // Arrange
+    const submitSpy = spyOn(component, 'onSubmit');
+
+    // Act
+    component.onEnterSend(new KeyboardEvent('keydown', { key: 'Enter' }));
+    component.onEnterSend(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true }));
+
+    // Assert
+    expect(submitSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('exposes the component on window when Cypress is detected', () => {
+    // Arrange
+    (window as any).Cypress = true;
+
+    const cypressFixture = TestBed.createComponent(ChatComponent);
+    const cypressComponent = cypressFixture.componentInstance;
+
+    // Act
+    cypressFixture.detectChanges();
+
+    // Assert
+    expect((window as any).chatComponent).toBe(cypressComponent);
+
+    delete (window as any).Cypress;
+    delete (window as any).chatComponent;
+  });
+
+  it('derives empty state and sending labels from signals', fakeAsync(() => {
+    // Arrange
+    component.selectedTopicId.set(null);
+
+    // Assert
+    expect(component.emptyStateText()).toContain('Sélectionnez ou créez');
+    expect(component.sendingLabel()).toBe('Envoyer');
+
+    // Act
+    component.selectedTopicId.set(1);
+    component.isSending.set(true);
+    tick();
+
+    // Assert
+    expect(component.emptyStateText()).toContain("Commencez la conversation");
+    expect(component.sendingLabel()).toBe('Envoi...');
+  }));
+
+  it('respects user scroll position when appending answers', fakeAsync(() => {
+    // Arrange
+    const viewportSpy = jasmine.createSpyObj('CdkVirtualScrollViewport', [
+      'scrollToIndex',
+      'measureScrollOffset',
+    ]);
+    viewportSpy.measureScrollOffset.and.returnValue(100);
+    (component as any).messagesViewport = viewportSpy;
+
+    (component as any).shouldStickToBottom = false;
+
+    // Act
+    (component as any).scrollToBottom();
+    tick();
+
+    // Assert
+    expect(viewportSpy.scrollToIndex).not.toHaveBeenCalled();
+
+    // Arrange
+    viewportSpy.measureScrollOffset.and.returnValue(0);
+    (component as any).shouldStickToBottom = true;
+
+    // Act
+    (component as any).scrollToBottom();
+    tick();
+
+    // Assert
+    expect(viewportSpy.scrollToIndex).toHaveBeenCalled();
   }));
 
   it('ignores submits while already sending', () => {
@@ -215,6 +330,19 @@ describe('ChatComponent', () => {
     expect(chatDataService.streamQuestion).not.toHaveBeenCalled();
   });
 
+  it('builds topic names for blank and long inputs', () => {
+    // Arrange & Act
+    const blankName = (component as any).buildTopicName('   ');
+    const longName = (component as any).buildTopicName(
+      'This is a very long question that certainly exceeds the maximum topic name length that we want to allow in the UI.'
+    );
+
+    // Assert
+    expect(blankName).toBe('Nouvelle conversation');
+    expect(longName.endsWith('…')).toBeTrue();
+    expect(longName.length).toBe(60);
+  });
+
   it('does not send when custom prompt is missing', () => {
     // Arrange
     component.question.set('Should block');
@@ -259,6 +387,28 @@ describe('ChatComponent', () => {
     expect(errorMessage?.isError).toBeTrue();
     expect(errorMessage?.content).toContain('Service unavailable');
     tick(200);
+    expect(component.isSending()).toBeFalse();
+  }));
+
+  it('shows a topic creation error when auto-creation fails', fakeAsync(() => {
+    // Arrange
+    component.selectedTopicId.set(null);
+    component.topics.set([]);
+    component.question.set('Needs a topic');
+
+    chatDataService.createTopic.and.returnValue(
+      throwError(() => new Error('Topic creation failed'))
+    );
+
+    // Act
+    component.onSubmit();
+    tick(250);
+
+    // Assert
+    expect(chatDataService.streamQuestion).not.toHaveBeenCalled();
+    const lastMessage = component.messages()[component.messages().length - 1];
+    expect(lastMessage?.isError).toBeTrue();
+    expect(lastMessage?.content).toContain('Topic creation failed');
     expect(component.isSending()).toBeFalse();
   }));
 
@@ -566,6 +716,18 @@ describe('ChatComponent', () => {
       limit: 30,
     });
     expect(component.messages().length).toBe(3);
+  });
+
+  it('restores auto-scroll state when viewport is unavailable', () => {
+    // Arrange
+    (component as any).shouldStickToBottom = false;
+    (component as any).messagesViewport = undefined;
+
+    // Act
+    (component as any).updateAutoScrollState();
+
+    // Assert
+    expect((component as any).shouldStickToBottom).toBeTrue();
   });
 
   it('handles topic load failures gracefully', () => {

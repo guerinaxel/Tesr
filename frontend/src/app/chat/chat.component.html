@@ -214,6 +214,7 @@
                 rows="2"
                 placeholder="Posez une question sur votre code..."
                 (keydown.space)="onSpaceSend($event)"
+                (keydown.enter)="onEnterSend($event)"
                 data-cy="question-input"
               ></textarea>
               <mat-hint>Appuyez sur Ctrl+Espace (ou Cmd+Espace) pour envoyer directement.</mat-hint>

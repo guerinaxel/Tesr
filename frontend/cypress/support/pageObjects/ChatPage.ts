@@ -9,6 +9,11 @@ export class ChatPage {
     return this;
   }
 
+  typeQuestionWithEnter(question: string) {
+    cy.get('[data-cy="question-input"]').type(`${question}{enter}`);
+    return this;
+  }
+
   clickSend() {
     cy.get('[data-cy="send-button"]').click();
     return this;

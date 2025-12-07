@@ -93,6 +93,7 @@ export class ChatComponent implements OnInit {
   private nextId = 1;
   private streamSub: Subscription | null = null;
   private streamingMessageId: number | null = null;
+  private shouldStickToBottom = true;
 
   readonly hasTopics = computed(() => this.topics().length > 0);
   readonly hasMessages = computed(() => this.messages().length > 0);
@@ -172,22 +173,34 @@ export class ChatComponent implements OnInit {
     this.messageSent.emit(userMsg);
     this.question.set('');
     this.isSending.set(true);
-    this.scrollToBottom();
+    this.scrollToBottom(true);
 
     const payload: CodeQaPayload = {
       question: text,
       system_prompt: this.systemPrompt(),
     };
 
-    if (this.selectedTopicId()) {
-      payload.topic_id = this.selectedTopicId() ?? undefined;
-    }
-
     if (this.isCustomPrompt()) {
       payload.custom_prompt = this.customPrompt().trim();
     }
 
-    this.startStreamingAnswer(payload);
+    const sendWithTopic = (topicId: number | null) => {
+      if (topicId) {
+        payload.topic_id = topicId;
+      }
+      this.startStreamingAnswer(payload);
+    };
+
+    this.ensureTopicSelection(text, sendWithTopic);
+  }
+
+  onEnterSend(event: KeyboardEvent): void {
+    if (event.shiftKey) {
+      return;
+    }
+
+    event.preventDefault();
+    this.onSubmit();
   }
 
   onSpaceSend(event: KeyboardEvent): void {
@@ -208,12 +221,70 @@ export class ChatComponent implements OnInit {
     this.onSubmit();
   }
 
-  private scrollToBottom(): void {
+  private scrollToBottom(force = false): void {
     const viewport = this.messagesViewport;
     if (!viewport) return;
+    if (!force && !this.shouldStickToBottom) return;
     setTimeout(() => {
       viewport.scrollToIndex(this.messages().length, 'smooth');
     }, 0);
+  }
+
+  private ensureTopicSelection(questionText: string, onReady: (topicId: number | null) => void) {
+    const existingTopicId = this.selectedTopicId();
+    if (existingTopicId != null) {
+      onReady(existingTopicId);
+      return;
+    }
+
+    const topicName = this.buildTopicName(questionText);
+
+    this.chatDataService.createTopic(topicName).subscribe({
+      next: (topic) => {
+        const summary: TopicSummary = {
+          id: topic.id,
+          name: topic.name,
+          message_count: topic.message_count,
+        };
+
+        this.selectedTopicId.set(topic.id);
+        this.topics.update((entries) => {
+          const existing = entries.find((entry) => entry.id === topic.id);
+          if (existing) {
+            return entries.map((entry) =>
+              entry.id === topic.id ? summary : entry
+            );
+          }
+
+          return [summary, ...entries];
+        });
+        this.hasMoreMessages = false;
+        onReady(topic.id);
+      },
+      error: (err) => {
+        const detail =
+          err?.message ?? err?.toString?.() ?? 'Erreur lors de la création du topic.';
+        this.messages.update((msgs) => [
+          ...msgs,
+          { id: this.nextId++, from: 'assistant', content: detail, isError: true },
+        ]);
+        this.finishSending();
+      },
+    });
+  }
+
+  private buildTopicName(questionText: string): string {
+    const normalized = questionText.trim().replace(/\s+/g, ' ');
+    const maxLength = 60;
+    if (!normalized) {
+      return 'Nouvelle conversation';
+    }
+
+    if (normalized.length <= maxLength) {
+      return normalized;
+    }
+
+    return normalized.slice(0, maxLength - 1) + '…';
   }
 
   private finishSending(): void {
@@ -298,7 +369,7 @@ export class ChatComponent implements OnInit {
         ]);
         this.finishSending();
         this.stopStreaming();
-        this.scrollToBottom();
+        this.scrollToBottom(true);
       },
     });
   }
@@ -412,6 +483,18 @@ export class ChatComponent implements OnInit {
         this.loadMessages(topicId);
       }
     }
+
+    this.updateAutoScrollState();
+  }
+
+  private updateAutoScrollState(): void {
+    const viewport = this.messagesViewport;
+    if (!viewport) {
+      this.shouldStickToBottom = true;
+      return;
+    }
+
+    this.shouldStickToBottom = viewport.measureScrollOffset('bottom') < 32;
   }
 
   topicTrackBy = (_: number, topic: TopicSummary) => topic.id;
@@ -446,6 +529,7 @@ export class ChatComponent implements OnInit {
     this.nextId = 1;
     this.messagesOffset = 0;
     this.hasMoreMessages = true;
+    this.shouldStickToBottom = true;
   }
 
   private loadMessages(topicId: number, reset = false): void {
@@ -479,7 +563,7 @@ export class ChatComponent implements OnInit {
           this.hasMoreMessages = Boolean(res.next_offset);
           this.messagesOffset =
             res.next_offset ?? this.messagesOffset + incomingMessages.length;
-          this.scrollToBottom();
+          this.scrollToBottom(true);
         },
         error: () => {
           if (reset) {
