@@ -1,4 +1,9 @@
 export class GlobalSearch {
+  search(value: string) {
+    this.typeQuery(value);
+    return this;
+  }
+
   typeQuery(value: string) {
     cy.get('[data-cy="global-search-input"]').type(value);
     return this;

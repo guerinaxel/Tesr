@@ -16,6 +16,12 @@ votre code est indexé, vectorisé, puis utilisé comme contexte pertinent pour 
 - API REST `/api/code-qa/` pour poser des questions sur le code.
 - Intégration Ollama + LLaMA 3.1 locale.
 - Commande Django : `build_rag_index` pour reconstruire l’index.
+- Gestion multi-sources : chaque index RAG est stocké dans `rag_sources/{uuid}/` avec métadonnées (nom, description, nb de fichiers, nb de chunks).
+- API de gestion des sources :
+  - `GET /api/rag-sources/` pour lister les sources disponibles.
+  - `POST /api/rag-sources/build/` pour créer une nouvelle source à partir d’un ou plusieurs chemins.
+  - `PATCH /api/rag-sources/{id}/` pour mettre à jour le nom ou la description.
+  - `POST /api/rag-sources/{id}/rebuild/` pour reconstruire une source sur des chemins donnés (remplace l’ancienne version).
 
 ---
 
@@ -148,7 +154,8 @@ docker compose up --build
 
 ```json
 {
-  "question": "À quoi sert le fichier models.py dans l’app accounts ?"
+  "question": "À quoi sert le fichier models.py dans l’app accounts ?",
+  "sources": ["uuid-source-backend", "uuid-source-frontend"]
 }
 ```
 
@@ -157,6 +164,29 @@ docker compose up --build
 ```json
 {
   "answer": "Le fichier models.py définit les modèles ORM..."
+}
+```
+
+### Endpoints RAG sources
+
+- `GET /api/rag-sources/` → retourne la liste des sources avec leurs métadonnées (nom, description, total_files, total_chunks, created_at).
+- `POST /api/rag-sources/build/` → construit une nouvelle source. Exemple :
+
+```json
+{
+  "name": "Mon dépôt",
+  "description": "Généré automatiquement",
+  "paths": ["/workspaces/projet/backend", "/workspaces/projet/frontend"]
+}
+```
+- `PATCH /api/rag-sources/{id}/` → met à jour le nom/description et réécrit le fichier `metadata.json` correspondant.
+- `POST /api/rag-sources/{id}/rebuild/` → reconstruit la source dans `rag_sources/{id}/` en supprimant la version précédente. Exemple :
+
+```json
+{
+  "name": "Frontend v2",
+  "description": "Index mis à jour",
+  "paths": ["/workspaces/projet/frontend"]
 }
 ```
 

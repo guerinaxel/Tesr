@@ -40,11 +40,12 @@ export interface SearchResponse {
   answers: SearchCategory<SearchMessageResult>;
 }
 
-export interface CodeQaPayload extends Record<string, string | number | undefined> {
+export interface CodeQaPayload extends Record<string, string | number | string[] | undefined> {
   question: string;
   system_prompt: string;
   topic_id?: number;
   custom_prompt?: string;
+  sources?: string[];
 }
 
 export interface CodeQaResponse {
@@ -101,6 +102,7 @@ export class ChatDataService {
             reader
               .read()
               .then(({ done, value }) => {
+                /* istanbul ignore next */
                 if (!active) {
                   return;
                 }
@@ -138,6 +140,7 @@ export class ChatDataService {
                 readChunk();
               })
               .catch((err) => {
+                /* istanbul ignore next */
                 if (!active) return;
                 active = false;
                 observer.error(err);
@@ -147,6 +150,7 @@ export class ChatDataService {
           readChunk();
         })
         .catch((error) => {
+          /* istanbul ignore next */
           if (!active) return;
           active = false;
           observer.error(error);

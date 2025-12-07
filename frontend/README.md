@@ -10,8 +10,9 @@ Il s’agit d’un composant standalone simple, extensible et responsive.
 
 - UI de chat minimaliste mais extensible.
 - Composants Angular standalone (Angular 20).
-- Envoi de requêtes vers `/api/code-qa/`.
+- Envoi de requêtes vers `/api/code-qa/` avec sélection multi-sources RAG.
 - Gestion du flux dialogué (messages utilisateur / IA).
+- Panneau "RAG Source Manager" pour lister et créer des sources (nom, description, chemins).
 - SCSS responsive.
 
 ---

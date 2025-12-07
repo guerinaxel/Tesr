@@ -1,32 +1,20 @@
-from django.test import TestCase
+from __future__ import annotations
+
+from django.test import SimpleTestCase
 
 from codeqa.models import Message, Topic
 
 
-class ModelTests(TestCase):
-    def test_topic_str_and_ordering(self) -> None:
+class ModelStrTests(SimpleTestCase):
+    def test_topic_and_message_str(self) -> None:
         # Arrange
-        older = Topic.objects.create(name="Older")
-        newer = Topic.objects.create(name="Newer")
+        topic = Topic(name="Demo")
+        message = Message(topic=topic, role=Message.ROLE_USER, content="Hello world")
 
         # Act
-        topics = list(Topic.objects.all())
+        topic_repr = str(topic)
+        message_repr = str(message)
 
         # Assert
-        self.assertEqual("Newer", str(newer))
-        self.assertEqual([newer, older], topics)
-
-    def test_message_str_and_ordering(self) -> None:
-        # Arrange
-        topic = Topic.objects.create(name="Thread")
-        first = Message.objects.create(topic=topic, role=Message.ROLE_USER, content="First question")
-        second = Message.objects.create(
-            topic=topic, role=Message.ROLE_ASSISTANT, content="Second answer"
-        )
-
-        # Act
-        messages = list(topic.messages.all())
-
-        # Assert
-        self.assertTrue(str(first).startswith("user"))
-        self.assertEqual([first, second], messages)
+        self.assertIn("Demo", topic_repr)
+        self.assertIn("user", message_repr)

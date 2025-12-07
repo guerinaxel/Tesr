@@ -83,6 +83,16 @@ describe('ChatDataService', () => {
     });
   });
 
+  it('fetches topic details with default pagination options', () => {
+    // Arrange & Act
+    service.getTopicDetail(9).subscribe();
+
+    // Assert
+    const req = httpMock.expectOne(`${environment.apiUrl}/topics/9/`);
+    expect(req.request.method).toBe('GET');
+    req.flush({ id: 9, name: 'Topic 9', message_count: 0, messages: [], next_offset: null });
+  });
+
   it('creates a new topic', () => {
     // Arrange & Act
     service.createTopic('New Feature').subscribe();
@@ -174,6 +184,20 @@ describe('ChatDataService', () => {
 
     expect(events[0]?.event).toBe('token');
     expect(events[1]?.event).toBe('done');
+  });
+
+  it('completes streams cleanly when no data is returned', async () => {
+    const reader = { read: () => Promise.resolve({ done: true, value: undefined }) };
+
+    (globalThis as any).fetch = jasmine
+      .createSpy()
+      .and.returnValue(Promise.resolve({ body: { getReader: () => reader } }));
+
+    const events = await lastValueFrom(
+      service.streamQuestion({ question: 'silent', system_prompt: 'code expert' }).pipe(toArray())
+    );
+
+    expect(events.length).toBe(0);
   });
 
   it('errors when the response body does not support streaming', async () => {

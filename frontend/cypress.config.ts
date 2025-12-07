@@ -11,6 +11,7 @@ export default defineConfig({
       attachments: true,
     },
   },
+  experimentalFetchPolyfill: true,
   e2e: {
     baseUrl: 'http://localhost:4200',
     supportFile: 'cypress/support/e2e.ts',

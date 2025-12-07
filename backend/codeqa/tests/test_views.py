@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
 import sys
 import types
+import uuid
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -41,13 +43,17 @@ from codeqa import rag_service as rag_service_module  # noqa: E402
 importlib.reload(rag_service_module)
 from codeqa.build_runner import BuildInProgressError  # noqa: E402
 from codeqa.rag_state import get_default_root, load_last_root, save_last_root  # noqa: E402
-from codeqa.models import Message, Topic  # noqa: E402
+from codeqa.models import Message, RagSource, Topic  # noqa: E402
 from codeqa.views import (  # noqa: E402
     BuildRagIndexView,
     CodeQAStreamView,
     CodeQAView,
     DocumentAnalysisView,
     HealthView,
+    RagSourceBuildView,
+    RagSourceDetailView,
+    RagSourceListView,
+    RagSourceRebuildView,
     SearchView,
     TopicDetailView,
     TopicListView,
@@ -58,16 +64,35 @@ class CodeQAViewTests(TestCase):
     def setUp(self) -> None:
         self.factory = APIRequestFactory()
         Topic.objects.all().delete()
+        self.source_id = str(uuid.uuid4())
 
     def test_post_returns_answer_payload(self) -> None:
         # Arrange
-        def fake_answer_question(question: str, top_k: int, system_prompt: str, custom_prompt: str | None = None):
-            return "answer text", {"num_contexts": 1, "prompt": system_prompt, "custom": custom_prompt}
+        def fake_answer_question(
+            question: str,
+            top_k: int,
+            system_prompt: str,
+            custom_prompt: str | None = None,
+            sources: list[str] | None = None,
+        ):
+            return (
+                "answer text",
+                {
+                    "num_contexts": 1,
+                    "prompt": system_prompt,
+                    "custom": custom_prompt,
+                    "sources": sources or [],
+                },
+            )
 
         rag_service_module.answer_question = fake_answer_question  # type: ignore[assignment]
         request = self.factory.post(
             "/api/code-qa/",
-            {"question": "Hello?", "system_prompt": "code expert"},
+            {
+                "question": "Hello?",
+                "system_prompt": "code expert",
+                "sources": [self.source_id],
+            },
             format="json",
         )
         view = CodeQAView.as_view()
@@ -80,6 +105,7 @@ class CodeQAViewTests(TestCase):
         self.assertEqual("answer text", response.data["answer"])
         self.assertEqual(1, response.data["meta"]["num_contexts"])
         self.assertEqual("code expert", response.data["meta"]["prompt"])
+        self.assertEqual([self.source_id], [str(s) for s in response.data["meta"]["sources"]])
         self.assertIsNone(response.data["meta"]["custom"])
 
     def test_custom_prompt_is_forwarded(self) -> None:
@@ -91,6 +117,7 @@ class CodeQAViewTests(TestCase):
             top_k: int,
             system_prompt: str,
             custom_prompt: str | None = None,
+            sources: list[str] | None = None,
         ):
             captured.update(
                 {
@@ -98,6 +125,7 @@ class CodeQAViewTests(TestCase):
                     "top_k": str(top_k),
                     "system_prompt": system_prompt,
                     "custom_prompt": custom_prompt,
+                "sources": sources,
                 }
             )
             return "answer text", {"num_contexts": 1}
@@ -105,7 +133,12 @@ class CodeQAViewTests(TestCase):
         rag_service_module.answer_question = fake_answer_question  # type: ignore[assignment]
         request = self.factory.post(
             "/api/code-qa/",
-            {"question": "Hi?", "system_prompt": "custom", "custom_prompt": "Act polite"},
+            {
+                "question": "Hi?",
+                "system_prompt": "custom",
+                "custom_prompt": "Act polite",
+                "sources": [self.source_id],
+            },
             format="json",
         )
 
@@ -114,6 +147,8 @@ class CodeQAViewTests(TestCase):
 
         # Assert
         self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertEqual([self.source_id], [str(s) for s in captured.get("sources", [])])
+        filtered = {k: v for k, v in captured.items() if k != "sources"}
         self.assertEqual(
             {
                 "question": "Hi?",
@@ -121,7 +156,7 @@ class CodeQAViewTests(TestCase):
                 "system_prompt": "custom",
                 "custom_prompt": "Act polite",
             },
-            captured,
+            filtered,
         )
 
     def test_stream_view_emits_sse_events(self) -> None:
@@ -132,7 +167,11 @@ class CodeQAViewTests(TestCase):
 
         request = self.factory.post(
             "/api/code-qa/stream/",
-            {"question": "Hello?", "system_prompt": "code expert"},
+            {
+                "question": "Hello?",
+                "system_prompt": "code expert",
+                "sources": [self.source_id],
+            },
             format="json",
         )
 
@@ -152,13 +191,19 @@ class CodeQAViewTests(TestCase):
             top_k: int,
             system_prompt: str,
             custom_prompt: str | None = None,
+            sources: list[str] | None = None,
         ):
             return "stored answer", {"num_contexts": 1}
 
         rag_service_module.answer_question = fake_answer_question  # type: ignore[assignment]
         request = self.factory.post(
             "/api/code-qa/",
-            {"question": "Hello?", "system_prompt": "code expert", "topic_id": topic.id},
+            {
+                "question": "Hello?",
+                "system_prompt": "code expert",
+                "topic_id": topic.id,
+                "sources": [self.source_id],
+            },
             format="json",
         )
 
@@ -177,7 +222,12 @@ class CodeQAViewTests(TestCase):
         # Arrange
         request = self.factory.post(
             "/api/code-qa/",
-            {"question": "Hello?", "system_prompt": "code expert", "topic_id": 999},
+            {
+                "question": "Hello?",
+                "system_prompt": "code expert",
+                "topic_id": 999,
+                "sources": [self.source_id],
+            },
             format="json",
         )
 
@@ -191,7 +241,11 @@ class CodeQAViewTests(TestCase):
         # Arrange
         request = self.factory.post(
             "/api/code-qa/",
-            {"question": "Hello?", "system_prompt": "code expert"},
+            {
+                "question": "Hello?",
+                "system_prompt": "code expert",
+                "sources": [self.source_id],
+            },
             format="json",
         )
         view = CodeQAView.as_view()
@@ -211,7 +265,7 @@ class CodeQAViewTests(TestCase):
         # Arrange
         request = self.factory.post(
             "/api/code-qa/",
-            {"question": "Hello?", "system_prompt": "custom"},
+            {"question": "Hello?", "system_prompt": "custom", "sources": [self.source_id]},
             format="json",
         )
 
@@ -221,6 +275,21 @@ class CodeQAViewTests(TestCase):
         # Assert
         self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
         self.assertIn("custom_prompt", response.data)
+
+    def test_requires_at_least_one_rag_source(self) -> None:
+        # Arrange
+        request = self.factory.post(
+            "/api/code-qa/",
+            {"question": "Hello?", "system_prompt": "code expert", "sources": []},
+            format="json",
+        )
+
+        # Act
+        response = CodeQAView.as_view()(request)
+
+        # Assert
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+        self.assertIn("detail", response.data)
 
 
 class HealthViewTests(SimpleTestCase):
@@ -505,3 +574,171 @@ class DocumentAnalysisViewTests(SimpleTestCase):
         )
 
         self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+
+
+class RagSourceViewTests(TestCase):
+    def setUp(self) -> None:
+        self.factory = APIRequestFactory()
+        self.tmpdir = TemporaryDirectory()
+        self.addCleanup(self.tmpdir.cleanup)
+        os.environ["RAG_SOURCES_DIR"] = self.tmpdir.name
+        self.addCleanup(os.environ.pop, "RAG_SOURCES_DIR", None)
+
+    def test_build_rag_source_generates_metadata_and_files(self) -> None:
+        # Arrange
+        sample_file = Path(self.tmpdir.name) / "sample.txt"
+        sample_file.write_text("hello world")
+
+        def fake_collect_code_chunks(_path: Path) -> list[str]:
+            return ["chunk-one", "chunk-two"]
+
+        def fake_iter_text_files(_path: Path):
+            return [sample_file]
+
+        created_texts: list[list[str]] = []
+
+        class FakeRagIndex:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def build_from_texts(self, texts: list[str]):
+                created_texts.append(list(texts))
+
+        with patch("codeqa.views.collect_code_chunks", fake_collect_code_chunks), patch(
+            "codeqa.views.iter_text_files", fake_iter_text_files
+        ), patch("codeqa.views.rag_service.RagIndex", FakeRagIndex):
+            payload = {"paths": [self.tmpdir.name], "name": "Docs", "description": "Desc"}
+            request = self.factory.post("/api/rag-sources/build/", payload, format="json")
+
+            # Act
+            response = RagSourceBuildView.as_view()(request)
+
+        # Assert
+        self.assertEqual(status.HTTP_201_CREATED, response.status_code)
+        self.assertEqual(1, RagSource.objects.count())
+        source = RagSource.objects.first()
+        assert source is not None
+        metadata_path = Path(source.path) / "metadata.json"
+        self.assertTrue(metadata_path.exists())
+        self.assertEqual([["chunk-one", "chunk-two"]], created_texts)
+        self.assertEqual("Docs", source.name)
+        self.assertEqual("Desc", source.description)
+
+    def test_lists_existing_sources_with_ordering(self) -> None:
+        # Arrange
+        older = RagSource.objects.create(
+            name="Older",
+            description="First",
+            path="/tmp/older",
+            total_files=1,
+            total_chunks=1,
+        )
+        newer = RagSource.objects.create(
+            name="Newer",
+            description="Second",
+            path="/tmp/newer",
+            total_files=2,
+            total_chunks=3,
+        )
+
+        request = self.factory.get("/api/rag-sources/")
+
+        # Act
+        response = RagSourceListView.as_view()(request)
+
+        # Assert
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        self.assertEqual(str(newer.id), str(response.data[0]["id"]))
+        self.assertEqual(str(older.id), str(response.data[-1]["id"]))
+
+    def test_build_returns_400_on_missing_paths(self) -> None:
+        # Arrange
+        payload = {"paths": [str(Path(self.tmpdir.name) / "missing")], "name": "oops"}
+        request = self.factory.post("/api/rag-sources/build/", payload, format="json")
+
+        # Act
+        response = RagSourceBuildView.as_view()(request)
+
+        # Assert
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code)
+        self.assertIn("Path not found", response.data["detail"])
+
+    def test_patch_updates_metadata_and_rewrites_file(self) -> None:
+        # Arrange
+        source = RagSource.objects.create(
+            name="Initial",
+            description="Old",
+            path=self.tmpdir.name,
+            total_files=1,
+            total_chunks=2,
+        )
+        metadata_path = Path(self.tmpdir.name) / "metadata.json"
+        metadata_path.write_text("{}")
+
+        request = self.factory.patch(
+            f"/api/rag-sources/{source.id}/",
+            {"name": "Updated", "description": "New description"},
+            format="json",
+        )
+
+        # Act
+        response = RagSourceDetailView.as_view()(request, source_id=str(source.id))
+
+        # Assert
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        source.refresh_from_db()
+        self.assertEqual("Updated", source.name)
+        self.assertEqual("New description", source.description)
+        metadata = json.loads(metadata_path.read_text())
+        self.assertEqual("Updated", metadata["name"])
+        self.assertEqual("New description", metadata["description"])
+
+    def test_rebuild_overwrites_artifacts_and_clears_cache(self) -> None:
+        # Arrange
+        sample_file = Path(self.tmpdir.name) / "first.txt"
+        sample_file.write_text("content")
+
+        source = RagSource.objects.create(
+            name="Docs",
+            description="First",
+            path=self.tmpdir.name,
+            total_files=1,
+            total_chunks=1,
+        )
+        rag_service_module._rag_indexes[str(source.id)] = object()  # type: ignore[assignment]
+
+        def fake_collect_code_chunks(_path: Path) -> list[str]:
+            return ["new-chunk"]
+
+        def fake_iter_text_files(_path: Path):
+            return [sample_file]
+
+        built_texts: list[list[str]] = []
+
+        class FakeRagIndex:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def build_from_texts(self, texts: list[str]):
+                built_texts.append(list(texts))
+
+        payload = {"paths": [self.tmpdir.name], "name": "Docs v2", "description": "Refreshed"}
+        request = self.factory.post(
+            f"/api/rag-sources/{source.id}/rebuild/", payload, format="json"
+        )
+
+        with patch("codeqa.views.collect_code_chunks", fake_collect_code_chunks), patch(
+            "codeqa.views.iter_text_files", fake_iter_text_files
+        ), patch("codeqa.views.rag_service.RagIndex", FakeRagIndex):
+            # Act
+            response = RagSourceRebuildView.as_view()(request, source_id=str(source.id))
+
+        # Assert
+        self.assertEqual(status.HTTP_200_OK, response.status_code)
+        source.refresh_from_db()
+        self.assertEqual("Docs v2", source.name)
+        self.assertEqual(1, source.total_files)
+        self.assertEqual([["new-chunk"]], built_texts)
+        self.assertNotIn(str(source.id), rag_service_module._rag_indexes)
+        metadata = json.loads((Path(source.path) / "metadata.json").read_text())
+        self.assertEqual("Docs v2", metadata["name"])

@@ -127,6 +127,7 @@ export class BuildRagIndexComponent implements OnInit, OnDestroy {
         },
         error: () => {
           this.showToast('Impossible de récupérer le dernier chemin utilisé.', 'error');
+          this.isLoadingRoot = false;
         },
         complete: () => {
           this.isLoadingRoot = false;

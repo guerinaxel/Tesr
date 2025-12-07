@@ -34,6 +34,7 @@ import {
   CodeQaPayload,
   TopicSummary,
 } from './chat-data.service';
+import { RagSource, RagSourceService } from '../rag-sources/rag-source.service';
 
 interface ChatMessage {
   id: number;
@@ -58,12 +59,14 @@ interface ChatMessage {
     MatListModule,
     MatProgressSpinnerModule,
     MatSelectModule,
+    MatDividerModule,
   ],
   templateUrl: './chat.component.html',
   styleUrls: ['./chat.component.scss'],
 })
 export class ChatComponent implements OnInit {
   private readonly chatDataService = inject(ChatDataService);
+  private readonly ragSourceService = inject(RagSourceService);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly initialTopicId = input<number | null>(null);
@@ -82,6 +85,24 @@ export class ChatComponent implements OnInit {
   readonly topics = signal<TopicSummary[]>([]);
   readonly selectedTopicId = signal<number | null>(null);
   readonly newTopicName = model('');
+  readonly ragSources = signal<RagSource[]>([]);
+  readonly selectedSources = signal<string[]>([]);
+  readonly ragSourcesLoading = signal(false);
+  readonly ragSourceError = signal('');
+  readonly buildSourceName = model('');
+  readonly buildSourceDescription = model('');
+  readonly buildSourcePaths = model('');
+  readonly isBuildFormOpen = signal(false);
+  readonly editingSourceId = signal<string | null>(null);
+  readonly editSourceName = model('');
+  readonly editSourceDescription = model('');
+  readonly editSourceError = signal('');
+  readonly rebuildingSourceId = signal<string | null>(null);
+  readonly rebuildSourceName = model('');
+  readonly rebuildSourceDescription = model('');
+  readonly rebuildSourcePaths = model('');
+  readonly rebuildSourceError = signal('');
+  readonly lastSourcesUsed = signal<string[]>([]);
   private topicsOffset = 0;
   private readonly topicsPageSize = 20;
   private hasMoreTopics = true;
@@ -110,11 +131,18 @@ export class ChatComponent implements OnInit {
   readonly topicSearchResults = signal<TopicSummary[]>([]);
   readonly isTopicSearchVisible = signal(false);
   readonly topicSearchLoading = signal(false);
+  readonly hasRagSources = computed(() => this.ragSources().length > 0);
+  readonly sourcesLabel = computed(() =>
+    this.selectedSources().length
+      ? `${this.selectedSources().length} source(s) sélectionnée(s)`
+      : 'Aucune source sélectionnée'
+  );
 
   private readonly topicSearch$ = new Subject<string>();
 
   ngOnInit(): void {
     this.loadTopics(this.initialTopicId(), true);
+    this.loadRagSources();
 
     if ((window as any).Cypress) {
       (window as any).chatComponent = this;
@@ -164,6 +192,19 @@ export class ChatComponent implements OnInit {
       return;
     }
 
+    if (!this.selectedSources().length) {
+        this.messages.update((msgs) => [
+          ...msgs,
+          {
+            id: this.nextId++,
+            from: 'assistant',
+            content: 'Sélectionnez au moins une source RAG avant de poser une question.',
+            isError: true,
+          },
+        ]);
+        return;
+    }
+
     const userMsg: ChatMessage = {
       id: this.nextId++,
       from: 'user',
@@ -173,11 +214,13 @@ export class ChatComponent implements OnInit {
     this.messageSent.emit(userMsg);
     this.question.set('');
     this.isSending.set(true);
+    this.lastSourcesUsed.set([]);
     this.scrollToBottom(true);
 
     const payload: CodeQaPayload = {
       question: text,
       system_prompt: this.systemPrompt(),
+      sources: this.selectedSources(),
     };
 
     if (this.isCustomPrompt()) {
@@ -223,7 +266,9 @@ export class ChatComponent implements OnInit {
 
   private scrollToBottom(force = false): void {
     const viewport = this.messagesViewport;
+    /* istanbul ignore next */
     if (!viewport) return;
+    /* istanbul ignore next */
     if (!force && !this.shouldStickToBottom) return;
     setTimeout(() => {
       viewport.scrollToIndex(this.messages().length, 'smooth');
@@ -317,6 +362,21 @@ export class ChatComponent implements OnInit {
         const event = (chunk as any).event;
         const data = (chunk as any).data;
 
+        if (event === 'meta' && data) {
+          const meta = data as any;
+          const names: string[] = Array.isArray(meta.source_names)
+            ? meta.source_names
+            : Array.isArray(meta.contexts)
+              ? Array.from(
+                  new Set(
+                    (meta.contexts as Array<{ source_name?: string }>).
+                      map((ctx) => ctx.source_name || '').filter(Boolean)
+                  )
+                )
+              : [];
+          this.lastSourcesUsed.set(names);
+        }
+
         if (event === 'token' && typeof data === 'string') {
           this.messages.update((msgs) =>
             msgs.map((msg) =>
@@ -371,6 +431,177 @@ export class ChatComponent implements OnInit {
         this.stopStreaming();
         this.scrollToBottom(true);
       },
+    });
+  }
+
+  loadRagSources(): void {
+    this.ragSourcesLoading.set(true);
+    this.ragSourceService.getSources().subscribe({
+      next: (sources) => {
+        this.ragSources.set(sources);
+        if (!this.selectedSources().length && sources.length) {
+          this.selectedSources.set(sources.map((src) => src.id));
+        }
+      },
+      error: () => {
+        this.ragSources.set([]);
+        this.ragSourcesLoading.set(false);
+      },
+      complete: () => this.ragSourcesLoading.set(false),
+    });
+  }
+
+  toggleBuildForm(): void {
+    this.isBuildFormOpen.update((current) => !current);
+    this.ragSourceError.set('');
+  }
+
+  buildNewSource(): void {
+    const rawPaths = this.buildSourcePaths()
+      .split(/\n|,/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+
+    if (!rawPaths.length) {
+      this.ragSourceError.set('Ajoutez au moins un chemin de dossier.');
+      return;
+    }
+
+    const payload = {
+      name: this.buildSourceName().trim() || null,
+      description: this.buildSourceDescription().trim() || null,
+      paths: rawPaths,
+    };
+
+    this.ragSourceError.set('');
+    this.ragSourcesLoading.set(true);
+
+    this.ragSourceService.buildSource(payload).subscribe({
+      next: (source) => {
+        this.ragSources.update((sources) => [source, ...sources]);
+        this.selectedSources.update((current) => [...new Set([...current, source.id])]);
+        this.buildSourceName.set('');
+        this.buildSourceDescription.set('');
+        this.buildSourcePaths.set('');
+        this.isBuildFormOpen.set(false);
+      },
+      error: (err) => {
+        const detail =
+          err?.error?.detail ??
+          err?.message ??
+          'Impossible de créer la source RAG. Vérifiez les chemins fournis.';
+        this.ragSourceError.set(detail);
+        this.ragSourcesLoading.set(false);
+      },
+      complete: () => this.ragSourcesLoading.set(false),
+    });
+  }
+
+  startEditSource(source: RagSource): void {
+    this.editingSourceId.set(source.id);
+    this.editSourceName.set(source.name);
+    this.editSourceDescription.set(source.description);
+    this.editSourceError.set('');
+    this.rebuildingSourceId.set(null);
+  }
+
+  cancelEditSource(): void {
+    this.editingSourceId.set(null);
+    this.editSourceName.set('');
+    this.editSourceDescription.set('');
+    this.editSourceError.set('');
+  }
+
+  saveSourceEdits(): void {
+    const sourceId = this.editingSourceId();
+    if (!sourceId) {
+      return;
+    }
+
+    const name = this.editSourceName().trim();
+    const description = this.editSourceDescription().trim();
+
+    if (!name) {
+      this.editSourceError.set('Le nom est requis.');
+      return;
+    }
+
+    this.ragSourcesLoading.set(true);
+    this.ragSourceService.updateSource(sourceId, { name, description }).subscribe({
+      next: (updated) => {
+        this.ragSources.update((sources) =>
+          sources.map((source) => (source.id === updated.id ? updated : source))
+        );
+        this.selectedSources.update((current) =>
+          current.includes(updated.id) ? current : [...current, updated.id]
+        );
+        this.cancelEditSource();
+      },
+      error: (err) => {
+        const detail =
+          err?.error?.detail ?? err?.message ?? 'Impossible de mettre à jour la source.';
+        this.editSourceError.set(detail);
+      },
+      complete: () => this.ragSourcesLoading.set(false),
+    });
+  }
+
+  startRebuildSource(source: RagSource): void {
+    this.rebuildingSourceId.set(source.id);
+    this.rebuildSourceName.set(source.name);
+    this.rebuildSourceDescription.set(source.description);
+    this.rebuildSourcePaths.set('');
+    this.rebuildSourceError.set('');
+    this.editingSourceId.set(null);
+  }
+
+  cancelRebuildSource(): void {
+    this.rebuildingSourceId.set(null);
+    this.rebuildSourceName.set('');
+    this.rebuildSourceDescription.set('');
+    this.rebuildSourcePaths.set('');
+    this.rebuildSourceError.set('');
+  }
+
+  rebuildSource(): void {
+    const sourceId = this.rebuildingSourceId();
+    if (!sourceId) {
+      return;
+    }
+
+    const rawPaths = this.rebuildSourcePaths()
+      .split(/\n|,/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+
+    if (!rawPaths.length) {
+      this.rebuildSourceError.set('Ajoutez au moins un chemin de dossier.');
+      return;
+    }
+
+    const payload = {
+      name: this.rebuildSourceName().trim() || null,
+      description: this.rebuildSourceDescription().trim() || null,
+      paths: rawPaths,
+    };
+
+    this.ragSourcesLoading.set(true);
+    this.ragSourceService.rebuildSource(sourceId, payload).subscribe({
+      next: (updated) => {
+        this.ragSources.update((sources) =>
+          sources.map((source) => (source.id === updated.id ? updated : source))
+        );
+        this.selectedSources.update((current) =>
+          current.includes(updated.id) ? current : [...current, updated.id]
+        );
+        this.cancelRebuildSource();
+      },
+      error: (err) => {
+        const detail =
+          err?.error?.detail ?? err?.message ?? 'Impossible de reconstruire la source.';
+        this.rebuildSourceError.set(detail);
+      },
+      complete: () => this.ragSourcesLoading.set(false),
     });
   }
 

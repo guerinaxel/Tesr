@@ -4,22 +4,32 @@ import { of, throwError } from 'rxjs';
 
 import { ChatComponent } from './chat.component';
 import { ChatDataService, StreamChunk } from './chat-data.service';
+import { RagSourceService } from '../rag-sources/rag-source.service';
 
 
 describe('ChatComponent', () => {
   let fixture: ComponentFixture<ChatComponent>;
   let component: ChatComponent;
   let chatDataService: jasmine.SpyObj<ChatDataService>;
+  let ragSourceService: jasmine.SpyObj<RagSourceService>;
 
   beforeEach(async () => {
     chatDataService = jasmine.createSpyObj<ChatDataService>(
       'ChatDataService',
       ['streamQuestion', 'sendQuestion', 'getTopics', 'getTopicDetail', 'createTopic', 'searchEverything']
     );
+    ragSourceService = jasmine.createSpyObj<RagSourceService>(
+      'RagSourceService',
+      ['getSources', 'buildSource', 'updateSource', 'rebuildSource']
+    );
+    ragSourceService.getSources.and.returnValue(of([]));
 
     await TestBed.configureTestingModule({
       imports: [ChatComponent, NoopAnimationsModule],
-      providers: [{ provide: ChatDataService, useValue: chatDataService }],
+      providers: [
+        { provide: ChatDataService, useValue: chatDataService },
+        { provide: RagSourceService, useValue: ragSourceService },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ChatComponent);
@@ -27,6 +37,7 @@ describe('ChatComponent', () => {
 
     component.topics.set([{ id: 1, name: 'Default', message_count: 0 }]);
     component.selectedTopicId.set(1);
+    component.selectedSources.set(['source-1']);
     chatDataService.getTopicDetail.and.returnValue(
       of({ id: 1, name: 'Default', message_count: 0, messages: [], next_offset: null })
     );
@@ -64,6 +75,7 @@ describe('ChatComponent', () => {
       question: 'Explain RAG',
       system_prompt: 'code expert',
       topic_id: 1,
+      sources: ['source-1'],
     });
     expect(chatDataService.getTopicDetail).toHaveBeenCalledWith(1, { limit: 0 });
 
@@ -108,11 +120,36 @@ describe('ChatComponent', () => {
       question: longQuestion,
       system_prompt: 'code expert',
       topic_id: 5,
+      sources: ['source-1'],
     });
     expect(component.selectedTopicId()).toBe(5);
     expect(component.topics()[0]).toEqual(
       jasmine.objectContaining({ id: 5, name: expectedName, message_count: 1 })
     );
+  }));
+
+  it('replaces existing topic entries when auto-creating with the same id', fakeAsync(() => {
+    // Arrange
+    component.topics.set([{ id: 6, name: 'Stale', message_count: 2 }]);
+    component.selectedTopicId.set(null);
+    component.question.set('New topic with same id');
+
+    chatDataService.createTopic.and.returnValue(
+      of({ id: 6, name: 'Fresh', message_count: 0, messages: [], next_offset: null })
+    );
+    chatDataService.streamQuestion.and.returnValue(
+      of({ event: 'done', data: { answer: 'ok' } } as StreamChunk)
+    );
+    chatDataService.getTopicDetail.and.returnValue(
+      of({ id: 6, name: 'Fresh', message_count: 1, messages: [], next_offset: null })
+    );
+
+    // Act
+    component.onSubmit();
+    tick(200);
+
+    // Assert
+    expect(component.topics()[0]).toEqual(jasmine.objectContaining({ id: 6, name: 'Fresh' }));
   }));
 
   it('keeps streamed partial tokens when the done payload is empty', fakeAsync(() => {
@@ -270,6 +307,7 @@ describe('ChatComponent', () => {
       system_prompt: 'custom',
       custom_prompt: 'You are concise',
       topic_id: 1,
+      sources: ['source-1'],
     });
   });
 
@@ -294,6 +332,7 @@ describe('ChatComponent', () => {
       question: 'Quick send',
       system_prompt: 'code expert',
       topic_id: 1,
+      sources: ['source-1'],
     });
 
     expect(component.messages()[0]).toEqual(
@@ -302,6 +341,22 @@ describe('ChatComponent', () => {
     expect(component.messages()[1]).toEqual(
       jasmine.objectContaining({ from: 'assistant', content: 'Delivered' })
     );
+  });
+
+  it('blocks sending when no RAG sources are selected', () => {
+    // Arrange
+    component.selectedSources.set([]);
+    component.question.set('Do not send');
+
+    // Act
+    component.onSubmit();
+
+    // Assert
+    expect(chatDataService.streamQuestion).not.toHaveBeenCalled();
+    const lastMessage = component.messages()[component.messages().length - 1];
+    expect(lastMessage?.isError).toBeTrue();
+    expect(lastMessage?.content).toContain('Sélectionnez au moins une source');
+    expect(component.isSending()).toBeFalse();
   });
 
   it('does not send the message when pressing space without modifiers', () => {
@@ -358,6 +413,53 @@ describe('ChatComponent', () => {
     expect(component.isSending()).toBeFalse();
   });
 
+  it('opens and closes the topic search panel', () => {
+    // Arrange
+    component.isTopicSearchVisible.set(true);
+    component.topicSearchQuery.set('abc');
+    component.topicSearchResults.set([{ id: 99, name: 'Tmp', message_count: 0 }]);
+
+    // Act
+    component.closeTopicSearch();
+
+    // Assert
+    expect(component.isTopicSearchVisible()).toBeFalse();
+    expect(component.topicSearchQuery()).toBe('');
+    expect(component.topicSearchResults()).toEqual([]);
+  });
+
+  it('performs topic search and populates results', fakeAsync(() => {
+    // Arrange
+    chatDataService.searchEverything.and.returnValue(
+      of({
+        topics: { items: [{ id: 3, name: 'Found', message_count: 1 }], next_offset: null },
+        questions: { items: [], next_offset: null },
+        answers: { items: [], next_offset: null },
+      })
+    );
+
+    // Act
+    component.onTopicSearchChange('Found');
+    tick(500);
+
+    // Assert
+    expect(component.topicSearchResults()[0].name).toBe('Found');
+    expect(component.topicSearchLoading()).toBeFalse();
+  }));
+
+  it('clears topic search results when lookup fails', fakeAsync(() => {
+    // Arrange
+    chatDataService.searchEverything.and.returnValue(throwError(() => new Error('fail')));
+
+    // Act
+    component.onTopicSearchChange('Fail');
+    tick(500);
+
+    // Assert
+    expect(component.topicSearchResults()).toEqual([]);
+    expect(component.topicSearchLoading()).toBeFalse();
+  }));
+
   it('does not send a request for blank input', () => {
     // Arrange
     component.question.set('   ');
@@ -410,6 +512,28 @@ describe('ChatComponent', () => {
     expect(lastMessage?.isError).toBeTrue();
     expect(lastMessage?.content).toContain('Topic creation failed');
     expect(component.isSending()).toBeFalse();
+  }));
+
+  it('captures meta contexts to infer used source names', fakeAsync(() => {
+    // Arrange
+    component.question.set('Meta please');
+
+    chatDataService.streamQuestion.and.returnValue(
+      of(
+        { event: 'meta', data: { contexts: [{ source_name: 'Docs' }, { source_name: 'API' }] } } as StreamChunk,
+        { event: 'done', data: { answer: 'ok' } } as StreamChunk
+      )
+    );
+    chatDataService.getTopicDetail.and.returnValue(
+      of({ id: 1, name: 'Default', message_count: 1, messages: [], next_offset: null })
+    );
+
+    // Act
+    component.onSubmit();
+    tick(200);
+
+    // Assert
+    expect(component.lastSourcesUsed()).toEqual(['Docs', 'API']);
   }));
 
   it('creates a new topic and loads it', () => {
@@ -730,6 +854,17 @@ describe('ChatComponent', () => {
     expect((component as any).shouldStickToBottom).toBeTrue();
   });
 
+  it('does not scroll when no viewport is attached', () => {
+    // Arrange
+    (component as any).messagesViewport = undefined;
+
+    // Act
+    (component as any).scrollToBottom();
+
+    // Assert
+    expect(component.messages().length).toBe(0);
+  });
+
   it('handles topic load failures gracefully', () => {
     // Arrange
     component.topics.set([
@@ -898,5 +1033,158 @@ describe('ChatComponent', () => {
     expect(
       component.messageTrackBy(0, { id: 7, from: 'assistant', content: 'Answer' })
     ).toBe(7);
+  }));
+
+  it('updates a rag source through the manager', fakeAsync(() => {
+    // Arrange
+    const source = {
+      id: 'source-1',
+      name: 'Legacy',
+      description: 'Old desc',
+      path: '/tmp',
+      created_at: new Date().toISOString(),
+      total_files: 1,
+      total_chunks: 2,
+    };
+    component.ragSources.set([source]);
+    ragSourceService.updateSource.and.returnValue(
+      of({ ...source, name: 'Renamed', description: 'Refined' })
+    );
+
+    // Act
+    component.startEditSource(source as any);
+    component.editSourceName.set('Renamed');
+    component.editSourceDescription.set('Refined');
+    component.saveSourceEdits();
+    tick();
+
+    // Assert
+    expect(ragSourceService.updateSource).toHaveBeenCalledWith('source-1', {
+      name: 'Renamed',
+      description: 'Refined',
+    });
+    expect(component.ragSources()[0].name).toBe('Renamed');
+    expect(component.editingSourceId()).toBeNull();
+  }));
+
+  it('rebuilds a rag source with new paths', fakeAsync(() => {
+    // Arrange
+    const source = {
+      id: 'source-2',
+      name: 'Frontend',
+      description: 'UI',
+      path: '/tmp',
+      created_at: new Date().toISOString(),
+      total_files: 1,
+      total_chunks: 1,
+    };
+    component.ragSources.set([source]);
+    ragSourceService.rebuildSource.and.returnValue(
+      of({ ...source, total_files: 3, total_chunks: 5 })
+    );
+
+    // Act
+    component.startRebuildSource(source as any);
+    component.rebuildSourcePaths.set('/workspace/app');
+    component.rebuildSource();
+    tick();
+
+    // Assert
+    expect(ragSourceService.rebuildSource).toHaveBeenCalledWith('source-2', {
+      name: 'Frontend',
+      description: 'UI',
+      paths: ['/workspace/app'],
+    });
+    expect(component.ragSources()[0].total_files).toBe(3);
+    expect(component.rebuildingSourceId()).toBeNull();
+  }));
+
+  it('defaults selected sources when loading rag sources succeeds', fakeAsync(() => {
+    // Arrange
+    const ragSources = [
+      { id: 'source-1', name: 'Backend', description: '', path: '', created_at: '', total_files: 1, total_chunks: 1 },
+      { id: 'source-2', name: 'Frontend', description: '', path: '', created_at: '', total_files: 2, total_chunks: 3 },
+    ];
+    component.selectedSources.set([]);
+    ragSourceService.getSources.and.returnValue(of(ragSources));
+
+    // Act
+    component.loadRagSources();
+    tick();
+
+    // Assert
+    expect(component.ragSources()).toEqual(ragSources);
+    expect(component.selectedSources()).toEqual(['source-1', 'source-2']);
+    expect(component.ragSourcesLoading()).toBeFalse();
+  }));
+
+  it('stores an error when build form has no paths', () => {
+    // Arrange
+    component.buildSourcePaths.set('   ');
+
+    // Act
+    component.buildNewSource();
+
+    // Assert
+    expect(component.ragSourceError()).toContain('chemin');
+    expect(ragSourceService.buildSource).not.toHaveBeenCalled();
+  });
+
+    it('captures build errors and keeps the form open', fakeAsync(() => {
+      // Arrange
+      component.buildSourceName.set('Docs');
+      component.buildSourceDescription.set('Docs portal');
+      component.buildSourcePaths.set('/tmp/docs');
+      component.isBuildFormOpen.set(true);
+      ragSourceService.buildSource.and.returnValue(throwError(() => new Error('fail')));
+
+    // Act
+    component.buildNewSource();
+    tick();
+
+    // Assert
+    expect(component.ragSourceError()).toContain('fail');
+    expect(component.isBuildFormOpen()).toBeTrue();
+    expect(component.ragSourcesLoading()).toBeFalse();
+  }));
+
+  it('blocks source edits when name is missing', () => {
+    // Arrange
+    component.editingSourceId.set('source-1');
+    component.editSourceName.set('   ');
+
+    // Act
+    component.saveSourceEdits();
+
+    // Assert
+    expect(component.editSourceError()).toContain('nom');
+    expect(ragSourceService.updateSource).not.toHaveBeenCalled();
+  });
+
+  it('records rebuild errors when paths are missing', () => {
+    // Arrange
+    component.rebuildingSourceId.set('source-5');
+    component.rebuildSourcePaths.set('   ');
+
+    // Act
+    component.rebuildSource();
+
+    // Assert
+    expect(component.rebuildSourceError()).toContain('chemin');
+    expect(ragSourceService.rebuildSource).not.toHaveBeenCalled();
+  });
+
+  it('handles load failures by clearing sources', fakeAsync(() => {
+    // Arrange
+    ragSourceService.getSources.and.returnValue(throwError(() => new Error('oops')));
+    component.ragSources.set([{ id: 'x', name: 'Temp', description: '', path: '', created_at: '', total_files: 0, total_chunks: 0 }]);
+
+    // Act
+    component.loadRagSources();
+    tick();
+
+    // Assert
+    expect(component.ragSources()).toEqual([]);
+    expect(component.ragSourcesLoading()).toBeFalse();
   }));
 });

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import inspect
 import json
+import shutil
+from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -21,13 +23,19 @@ from .document_service import (
 )
 from .build_runner import BuildInProgressError, get_progress, start_build
 from .rag_state import get_default_root, load_last_root, save_last_root
-from .models import Message, Topic
+from .models import Message, Topic, RagSource
 from .serializers import (
     BuildRagRequestSerializer,
     CodeQuestionSerializer,
     DocumentAnalysisSerializer,
+    RagSourceBuildSerializer,
+    RagSourceRebuildSerializer,
+    RagSourceSerializer,
+    RagSourceUpdateSerializer,
     TopicCreateSerializer,
 )
+from .code_extractor import collect_code_chunks, iter_text_files
+from .rag_service import _rag_sources_base_dir, drop_cached_source
 
 
 def _parse_pagination(request: HttpRequest, *, default_limit: int = 20, max_limit: int = 50) -> tuple[int, int]:
@@ -70,6 +78,13 @@ class CodeQAView(APIView):
         custom_prompt: str | None = serializer.validated_data.get("custom_prompt")
         typo_prompt: str | None = serializer.validated_data.get("custom_pront")
         topic_id: int | None = serializer.validated_data.get("topic_id")
+        sources = serializer.validated_data.get("sources") or []
+
+        if not sources:
+            return Response(
+                {"detail": "At least one RAG source must be selected."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         topic: Topic | None = None
         if topic_id is not None:
@@ -85,6 +100,7 @@ class CodeQAView(APIView):
             "top_k": top_k,
             "system_prompt": system_prompt,
             "custom_prompt": custom_prompt or typo_prompt,
+            "sources": sources,
         }
 
         signature = inspect.signature(rag_service.answer_question)
@@ -136,6 +152,13 @@ class CodeQAStreamView(APIView):
         custom_prompt: str | None = serializer.validated_data.get("custom_prompt")
         typo_prompt: str | None = serializer.validated_data.get("custom_pront")
         topic_id: int | None = serializer.validated_data.get("topic_id")
+        sources = serializer.validated_data.get("sources") or []
+
+        if not sources:
+            return Response(
+                {"detail": "At least one RAG source must be selected."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         topic: Topic | None = None
         if topic_id is not None:
@@ -153,6 +176,7 @@ class CodeQAStreamView(APIView):
                 fusion_weight=fusion_weight,
                 system_prompt=system_prompt,
                 custom_prompt=custom_prompt or typo_prompt,
+                sources=sources,
             )
         except rag_service.AnswerNotReadyError as exc:
             return Response(
@@ -433,5 +457,191 @@ class BuildRagIndexView(APIView):
                 "root": str(resolved_root),
                 "progress": progress.to_dict(),
             },
+            status=status.HTTP_200_OK,
+        )
+
+
+def _write_metadata_file(source: RagSource) -> None:
+    base_dir = Path(source.path)
+    base_dir.mkdir(parents=True, exist_ok=True)
+    metadata = {
+        "id": str(source.id),
+        "name": source.name,
+        "description": source.description,
+        "path": source.path,
+        "total_files": source.total_files,
+        "total_chunks": source.total_chunks,
+    }
+    (base_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+
+def _build_source(
+    *,
+    name: str | None,
+    description: str | None,
+    paths: list[str],
+    existing: RagSource | None = None,
+) -> RagSource:
+    resolved_paths = [Path(p).resolve() for p in paths]
+    counter: Counter[str] = Counter()
+    total_files = 0
+    chunks: list[str] = []
+
+    for path in resolved_paths:
+        if not path.exists():
+            raise FileNotFoundError(f"Path not found: {path}")
+        chunks.extend(collect_code_chunks(path))
+        files_here = list(iter_text_files(path))
+        total_files += len(files_here)
+        counter.update(f.suffix for f in files_here)
+
+    total_chunks = len(chunks)
+    final_name = (name or resolved_paths[0].name).strip()
+    popular_ext = ", ".join(ext for ext, _ in counter.most_common(3)) or "files"
+    final_description = (description or (
+        f"Auto-generated source from {len(resolved_paths)} path(s) containing {total_files} files ({popular_ext})."
+    )).strip()
+
+    if existing is None:
+        source = RagSource.objects.create(
+            name=final_name,
+            description=final_description,
+            path="",
+            total_files=total_files,
+            total_chunks=total_chunks,
+        )
+    else:
+        source = existing
+        source.name = final_name
+        source.description = final_description
+        source.total_files = total_files
+        source.total_chunks = total_chunks
+
+    base_dir = _rag_sources_base_dir() / str(source.id)
+    if base_dir.exists():
+        shutil.rmtree(base_dir)
+    base_dir.mkdir(parents=True, exist_ok=True)
+    source.path = str(base_dir)
+    source.save(update_fields=["name", "description", "total_files", "total_chunks", "path"])
+
+    config = rag_service._build_config_from_env()
+    config.index_path = base_dir / "rag_index.faiss"
+    config.docs_path = base_dir / "docs.pkl"
+    config.whoosh_index_dir = base_dir / "whoosh_index"
+
+    rag_index = rag_service.RagIndex(config)
+    rag_index.build_from_texts(chunks)
+
+    _write_metadata_file(source)
+    drop_cached_source(str(source.id))
+    return source
+
+
+class RagSourceListView(APIView):
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> Response:
+        sources = RagSource.objects.all().order_by("-created_at")
+        serializer = RagSourceSerializer(
+            [
+                {
+                    "id": source.id,
+                    "name": source.name,
+                    "description": source.description,
+                    "path": source.path,
+                    "created_at": source.created_at,
+                    "total_files": source.total_files,
+                    "total_chunks": source.total_chunks,
+                }
+                for source in sources
+            ],
+            many=True,
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class RagSourceBuildView(APIView):
+    def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> Response:
+        serializer = RagSourceBuildSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        paths = serializer.validated_data["paths"]
+        name = serializer.validated_data.get("name")
+        description = serializer.validated_data.get("description")
+
+        try:
+            source = _build_source(name=name, description=description, paths=paths)
+        except FileNotFoundError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            return Response(
+                {"detail": "Failed to build RAG source.", "errors": str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        payload = {
+            "id": source.id,
+            "name": source.name,
+            "description": source.description,
+            "path": source.path,
+            "created_at": source.created_at,
+            "total_files": source.total_files,
+            "total_chunks": source.total_chunks,
+        }
+        return Response(payload, status=status.HTTP_201_CREATED)
+
+
+class RagSourceDetailView(APIView):
+    def patch(self, request: HttpRequest, source_id: str, *args: Any, **kwargs: Any) -> Response:
+        serializer = RagSourceUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        source = get_object_or_404(RagSource.objects.all(), id=source_id)
+        updated_fields: list[str] = []
+
+        if "name" in serializer.validated_data:
+            source.name = serializer.validated_data.get("name") or source.name
+            updated_fields.append("name")
+
+        if "description" in serializer.validated_data:
+            source.description = serializer.validated_data.get("description") or ""
+            updated_fields.append("description")
+
+        if updated_fields:
+            source.save(update_fields=updated_fields)
+            _write_metadata_file(source)
+            drop_cached_source(str(source.id))
+
+        return Response(
+            RagSourceSerializer(source).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class RagSourceRebuildView(APIView):
+    def post(self, request: HttpRequest, source_id: str, *args: Any, **kwargs: Any) -> Response:
+        serializer = RagSourceRebuildSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        source = get_object_or_404(RagSource.objects.all(), id=source_id)
+        name = serializer.validated_data.get("name")
+        description = serializer.validated_data.get("description")
+        paths = serializer.validated_data["paths"]
+
+        try:
+            updated_source = _build_source(
+                name=name,
+                description=description,
+                paths=paths,
+                existing=source,
+            )
+        except FileNotFoundError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            return Response(
+                {"detail": "Failed to rebuild RAG source.", "errors": str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response(
+            RagSourceSerializer(updated_source).data,
             status=status.HTTP_200_OK,
         )
