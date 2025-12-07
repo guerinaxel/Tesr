@@ -211,6 +211,149 @@ mat-card-content {
   font-size: 20px;
 }
 
+.rag-sources {
+  background: linear-gradient(180deg, #0b1120, #0f172a);
+  color: #e2e8f0;
+  border-radius: 14px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.rag-sources__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.rag-sources__eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 0 0 4px;
+}
+
+.rag-sources__selector {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.rag-sources__field {
+  flex: 1;
+}
+
+.rag-sources__loading,
+.rag-sources__empty {
+  margin-top: 0.5rem;
+  color: #cbd5e1;
+}
+
+.rag-source-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.rag-source-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.85rem;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.rag-source-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.rag-source-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.rag-source-card__title {
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.rag-source-card__description {
+  color: #cbd5e1;
+  font-size: 14px;
+  margin: 4px 0;
+}
+
+.rag-source-card__meta {
+  display: flex;
+  gap: 10px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.rag-source-card__date {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.rag-source-builder {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  padding: 0.85rem;
+  margin-top: 0.75rem;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+}
+
+.rag-source-builder__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.rag-source-builder__paths {
+  grid-column: span 2;
+}
+
+.rag-source-builder__error {
+  margin-top: 6px;
+  color: #f87171;
+}
+
+.rag-source-builder__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.rag-source-card__form {
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.65rem;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+}
+
+.rag-source-card__hint {
+  color: #94a3b8;
+  font-size: 13px;
+  margin-bottom: 0.5rem;
+}
+
+.sources-used {
+  margin-top: 8px;
+  font-size: 14px;
+  color: #cbd5e1;
+}
+
 .message__content {
   white-space: pre-wrap;
   word-wrap: break-word;

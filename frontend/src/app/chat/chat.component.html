@@ -121,6 +121,216 @@
       </mat-card-header>
 
       <mat-card-content>
+        <div class="rag-sources" data-cy="rag-source-manager">
+          <div class="rag-sources__header">
+            <div>
+              <p class="rag-sources__eyebrow">RAG</p>
+              <h4>RAG Source Manager</h4>
+              <p>Sélectionnez les sources à interroger ou créez-en de nouvelles.</p>
+            </div>
+            <button mat-stroked-button type="button" (click)="toggleBuildForm()" data-cy="toggle-build-source">
+              <mat-icon aria-hidden="true">add</mat-icon>
+              Nouvelle source
+            </button>
+          </div>
+
+          <div class="rag-sources__selector">
+            <mat-form-field appearance="outline" class="rag-sources__field">
+              <mat-label>Sources RAG</mat-label>
+              <mat-select
+                multiple
+                [ngModel]="selectedSources()"
+                (ngModelChange)="selectedSources.set($event)"
+                data-cy="rag-source-select"
+              >
+                <mat-option
+                  *ngFor="let source of ragSources()"
+                  [value]="source.id"
+                  [attr.data-cy]="'rag-source-option-' + source.id"
+                >
+                  {{ source.name }} — {{ source.total_files }} fichiers, {{ source.total_chunks }} chunks
+                </mat-option>
+              </mat-select>
+              <mat-hint>{{ sourcesLabel() }}</mat-hint>
+            </mat-form-field>
+            <button mat-button type="button" (click)="loadRagSources()" data-cy="refresh-rag-sources">
+              Rafraîchir
+            </button>
+          </div>
+
+          @if (ragSourcesLoading()) {
+            <div class="rag-sources__loading">Chargement des sources...</div>
+          } @else if (!ragSources().length) {
+            <div class="rag-sources__empty">Aucune source disponible. Créez-en une pour démarrer.</div>
+          } @else {
+            <div class="rag-source-cards">
+              @for (source of ragSources(); track source.id) {
+                <div class="rag-source-card" data-cy="rag-source-card">
+                  <div class="rag-source-card__header">
+                    <div>
+                      <div class="rag-source-card__title">{{ source.name }}</div>
+                      <div class="rag-source-card__description">{{ source.description }}</div>
+                      <div class="rag-source-card__meta">
+                        <span>Fichiers : {{ source.total_files }}</span>
+                        <span>Chunks : {{ source.total_chunks }}</span>
+                      </div>
+                    </div>
+                    <div class="rag-source-card__actions">
+                      <button
+                        mat-button
+                        color="primary"
+                        type="button"
+                        (click)="startEditSource(source)"
+                        data-cy="edit-rag-source"
+                      >
+                        Modifier
+                      </button>
+                      <button
+                        mat-button
+                        type="button"
+                        (click)="startRebuildSource(source)"
+                        data-cy="rebuild-rag-source"
+                      >
+                        Reconstruire
+                      </button>
+                    </div>
+                  </div>
+                  <div class="rag-source-card__date">{{ source.created_at | date: 'medium' }}</div>
+
+                  @if (editingSourceId() === source.id) {
+                    <div class="rag-source-card__form" data-cy="edit-rag-form">
+                      <mat-form-field appearance="outline">
+                        <mat-label>Nom</mat-label>
+                        <input
+                          matInput
+                          [ngModel]="editSourceName()"
+                          (ngModelChange)="editSourceName.set($event)"
+                          placeholder="Nom de la source"
+                          data-cy="edit-rag-name"
+                        />
+                      </mat-form-field>
+                      <mat-form-field appearance="outline">
+                        <mat-label>Description</mat-label>
+                        <input
+                          matInput
+                          [ngModel]="editSourceDescription()"
+                          (ngModelChange)="editSourceDescription.set($event)"
+                          placeholder="Description"
+                          data-cy="edit-rag-description"
+                        />
+                      </mat-form-field>
+                      @if (editSourceError()) {
+                        <div class="rag-source-builder__error" data-cy="edit-rag-error">{{ editSourceError() }}</div>
+                      }
+                      <div class="rag-source-builder__actions">
+                        <button mat-stroked-button type="button" (click)="cancelEditSource()">Annuler</button>
+                        <button mat-flat-button color="primary" type="button" (click)="saveSourceEdits()" data-cy="submit-edit-rag">
+                          Enregistrer
+                        </button>
+                      </div>
+                    </div>
+                  }
+
+                  @if (rebuildingSourceId() === source.id) {
+                    <div class="rag-source-card__form" data-cy="rebuild-rag-form">
+                      <p class="rag-source-card__hint">Reconstruire la source efface la version précédente.</p>
+                      <div class="rag-source-builder__grid">
+                        <mat-form-field appearance="outline">
+                          <mat-label>Nom</mat-label>
+                          <input
+                            matInput
+                            [ngModel]="rebuildSourceName()"
+                            (ngModelChange)="rebuildSourceName.set($event)"
+                            placeholder="Nom (optionnel)"
+                            data-cy="rebuild-rag-name"
+                          />
+                        </mat-form-field>
+                        <mat-form-field appearance="outline">
+                          <mat-label>Description</mat-label>
+                          <input
+                            matInput
+                            [ngModel]="rebuildSourceDescription()"
+                            (ngModelChange)="rebuildSourceDescription.set($event)"
+                            placeholder="Description (optionnelle)"
+                            data-cy="rebuild-rag-description"
+                          />
+                        </mat-form-field>
+                        <mat-form-field appearance="outline" class="rag-source-builder__paths">
+                          <mat-label>Chemins à indexer</mat-label>
+                          <textarea
+                            matInput
+                            rows="3"
+                            [ngModel]="rebuildSourcePaths()"
+                            (ngModelChange)="rebuildSourcePaths.set($event)"
+                            placeholder="/workspace/projet/backend"
+                            data-cy="rebuild-rag-paths"
+                          ></textarea>
+                        </mat-form-field>
+                      </div>
+                      @if (rebuildSourceError()) {
+                        <div class="rag-source-builder__error" data-cy="rebuild-rag-error">{{ rebuildSourceError() }}</div>
+                      }
+                      <div class="rag-source-builder__actions">
+                        <button mat-stroked-button type="button" (click)="cancelRebuildSource()">Annuler</button>
+                        <button mat-flat-button color="primary" type="button" (click)="rebuildSource()" data-cy="submit-rebuild-rag">
+                          Reconstruire
+                        </button>
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          }
+
+          @if (isBuildFormOpen()) {
+            <div class="rag-source-builder" data-cy="build-source-form">
+              <h5>Créer une nouvelle source</h5>
+              <div class="rag-source-builder__grid">
+                <mat-form-field appearance="outline">
+                  <mat-label>Nom</mat-label>
+                  <input
+                    matInput
+                    [ngModel]="buildSourceName()"
+                    (ngModelChange)="buildSourceName.set($event)"
+                    placeholder="Mon dépôt"
+                    data-cy="build-source-name"
+                  />
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Description</mat-label>
+                  <input
+                    matInput
+                    [ngModel]="buildSourceDescription()"
+                    (ngModelChange)="buildSourceDescription.set($event)"
+                    placeholder="Description optionnelle"
+                    data-cy="build-source-description"
+                  />
+                </mat-form-field>
+                <mat-form-field appearance="outline" class="rag-source-builder__paths">
+                  <mat-label>Chemins (séparés par des virgules ou des retours à la ligne)</mat-label>
+                  <textarea
+                    matInput
+                    rows="3"
+                    [ngModel]="buildSourcePaths()"
+                    (ngModelChange)="buildSourcePaths.set($event)"
+                    placeholder="/workspaces/projet/backend, /workspaces/projet/frontend"
+                    data-cy="build-source-paths"
+                  ></textarea>
+                </mat-form-field>
+              </div>
+              @if (ragSourceError()) {
+                <div class="rag-source-builder__error" data-cy="build-source-error">{{ ragSourceError() }}</div>
+              }
+              <div class="rag-source-builder__actions">
+                <button mat-stroked-button type="button" (click)="toggleBuildForm()">Annuler</button>
+                <button mat-flat-button color="primary" type="button" (click)="buildNewSource()" data-cy="submit-build-source">
+                  Construire
+                </button>
+              </div>
+            </div>
+          }
+        </div>
         <cdk-virtual-scroll-viewport
           class="messages"
           [itemSize]="120"
@@ -165,6 +375,9 @@
             </div>
           </ng-container>
         </cdk-virtual-scroll-viewport>
+        <div class="sources-used" *ngIf="lastSourcesUsed().length" data-cy="sources-used-banner">
+          Sources utilisées : {{ lastSourcesUsed().join(', ') }}
+        </div>
       </mat-card-content>
 
       <mat-divider></mat-divider>

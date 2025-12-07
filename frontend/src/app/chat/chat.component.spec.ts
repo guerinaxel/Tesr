@@ -4,22 +4,32 @@ import { of, throwError } from 'rxjs';
 
 import { ChatComponent } from './chat.component';
 import { ChatDataService, StreamChunk } from './chat-data.service';
+import { RagSourceService } from '../rag-sources/rag-source.service';
 
 
 describe('ChatComponent', () => {
   let fixture: ComponentFixture<ChatComponent>;
   let component: ChatComponent;
   let chatDataService: jasmine.SpyObj<ChatDataService>;
+  let ragSourceService: jasmine.SpyObj<RagSourceService>;
 
   beforeEach(async () => {
     chatDataService = jasmine.createSpyObj<ChatDataService>(
       'ChatDataService',
       ['streamQuestion', 'sendQuestion', 'getTopics', 'getTopicDetail', 'createTopic', 'searchEverything']
     );
+    ragSourceService = jasmine.createSpyObj<RagSourceService>(
+      'RagSourceService',
+      ['getSources', 'buildSource', 'updateSource', 'rebuildSource']
+    );
+    ragSourceService.getSources.and.returnValue(of([]));
 
     await TestBed.configureTestingModule({
       imports: [ChatComponent, NoopAnimationsModule],
-      providers: [{ provide: ChatDataService, useValue: chatDataService }],
+      providers: [
+        { provide: ChatDataService, useValue: chatDataService },
+        { provide: RagSourceService, useValue: ragSourceService },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ChatComponent);
@@ -27,6 +37,7 @@ describe('ChatComponent', () => {
 
     component.topics.set([{ id: 1, name: 'Default', message_count: 0 }]);
     component.selectedTopicId.set(1);
+    component.selectedSources.set(['source-1']);
     chatDataService.getTopicDetail.and.returnValue(
       of({ id: 1, name: 'Default', message_count: 0, messages: [], next_offset: null })
     );
@@ -64,6 +75,7 @@ describe('ChatComponent', () => {
       question: 'Explain RAG',
       system_prompt: 'code expert',
       topic_id: 1,
+      sources: ['source-1'],
     });
     expect(chatDataService.getTopicDetail).toHaveBeenCalledWith(1, { limit: 0 });
 
@@ -108,6 +120,7 @@ describe('ChatComponent', () => {
       question: longQuestion,
       system_prompt: 'code expert',
       topic_id: 5,
+      sources: ['source-1'],
     });
     expect(component.selectedTopicId()).toBe(5);
     expect(component.topics()[0]).toEqual(
@@ -270,6 +283,7 @@ describe('ChatComponent', () => {
       system_prompt: 'custom',
       custom_prompt: 'You are concise',
       topic_id: 1,
+      sources: ['source-1'],
     });
   });
 
@@ -294,6 +308,7 @@ describe('ChatComponent', () => {
       question: 'Quick send',
       system_prompt: 'code expert',
       topic_id: 1,
+      sources: ['source-1'],
     });
 
     expect(component.messages()[0]).toEqual(
@@ -898,5 +913,69 @@ describe('ChatComponent', () => {
     expect(
       component.messageTrackBy(0, { id: 7, from: 'assistant', content: 'Answer' })
     ).toBe(7);
+  }));
+
+  it('updates a rag source through the manager', fakeAsync(() => {
+    // Arrange
+    const source = {
+      id: 'source-1',
+      name: 'Legacy',
+      description: 'Old desc',
+      path: '/tmp',
+      created_at: new Date().toISOString(),
+      total_files: 1,
+      total_chunks: 2,
+    };
+    component.ragSources.set([source]);
+    ragSourceService.updateSource.and.returnValue(
+      of({ ...source, name: 'Renamed', description: 'Refined' })
+    );
+
+    // Act
+    component.startEditSource(source as any);
+    component.editSourceName.set('Renamed');
+    component.editSourceDescription.set('Refined');
+    component.saveSourceEdits();
+    tick();
+
+    // Assert
+    expect(ragSourceService.updateSource).toHaveBeenCalledWith('source-1', {
+      name: 'Renamed',
+      description: 'Refined',
+    });
+    expect(component.ragSources()[0].name).toBe('Renamed');
+    expect(component.editingSourceId()).toBeNull();
+  }));
+
+  it('rebuilds a rag source with new paths', fakeAsync(() => {
+    // Arrange
+    const source = {
+      id: 'source-2',
+      name: 'Frontend',
+      description: 'UI',
+      path: '/tmp',
+      created_at: new Date().toISOString(),
+      total_files: 1,
+      total_chunks: 1,
+    };
+    component.ragSources.set([source]);
+    ragSourceService.rebuildSource.and.returnValue(
+      of({ ...source, total_files: 3, total_chunks: 5 })
+    );
+
+    // Act
+    component.startRebuildSource(source as any);
+    component.rebuildSourcePaths.set('/workspace/app');
+    component.rebuildSource();
+    tick();
+
+    // Assert
+    expect(ragSourceService.rebuildSource).toHaveBeenCalledWith('source-2', {
+      name: 'Frontend',
+      description: 'UI',
+      paths: ['/workspace/app'],
+    });
+    expect(component.ragSources()[0].total_files).toBe(3);
+    expect(component.rebuildingSourceId()).toBeNull();
   }));
 });

@@ -13,6 +13,17 @@ type ChatRequestBody = {
   system_prompt: string;
   custom_prompt?: string;
   topic_id?: number;
+  sources?: string[];
+};
+
+type RagSource = {
+  id: string;
+  name: string;
+  description: string;
+  path: string;
+  created_at: string;
+  total_files: number;
+  total_chunks: number;
 };
 
 export const stubTopicList = (
@@ -87,5 +98,31 @@ export const stubSearch = (
 ) => {
   cy.intercept('GET', '**/search/**', (req) => {
     req.reply({ statusCode: 200, body: responseBody });
+  }).as(alias);
+};
+
+export const stubRagSources = (sources: RagSource[], alias = 'ragSources') => {
+  cy.intercept('GET', `${apiUrl}/rag-sources/`, sources).as(alias);
+};
+
+export const stubBuildRagSource = (source: RagSource, alias = 'buildRagSource') => {
+  cy.intercept('POST', `${apiUrl}/rag-sources/build/`, source).as(alias);
+};
+
+export const stubUpdateRagSource = (id: string, source: RagSource, alias = 'updateRagSource') => {
+  cy.intercept('PATCH', `${apiUrl}/rag-sources/${id}/`, (req) => {
+    req.reply(source);
+  }).as(alias);
+};
+
+export const stubRebuildRagSource = (
+  id: string,
+  expectedPaths: string[],
+  source: RagSource,
+  alias = 'rebuildRagSource'
+) => {
+  cy.intercept('POST', `${apiUrl}/rag-sources/${id}/rebuild/`, (req) => {
+    expect(req.body.paths).to.deep.equal(expectedPaths);
+    req.reply(source);
   }).as(alias);
 };

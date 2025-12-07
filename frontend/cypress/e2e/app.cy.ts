@@ -7,18 +7,42 @@ import {
   stubBuildRag,
   stubCreateTopic,
   stubSearch,
+  stubRagSources,
   stubStreamQuestion,
   stubTopicDetail,
   stubTopicList,
+  stubUpdateRagSource,
+  stubRebuildRagSource,
 } from '../support/utils/apiStubs';
 
 const chatPage = new ChatPage();
 const globalSearch = new GlobalSearch();
 const topicsPanel = new TopicsPanel();
+const defaultSources = [
+  {
+    id: 'source-1',
+    name: 'Backend',
+    description: 'Django code',
+    path: '/tmp/backend',
+    created_at: new Date().toISOString(),
+    total_files: 10,
+    total_chunks: 20,
+  },
+  {
+    id: 'source-2',
+    name: 'Frontend',
+    description: 'Angular UI',
+    path: '/tmp/frontend',
+    created_at: new Date().toISOString(),
+    total_files: 15,
+    total_chunks: 25,
+  },
+];
 
 describe('AI Code Assistant app', () => {
   it('sends a chat message and renders assistant reply', () => {
     // Arrange
+    stubRagSources([defaultSources[0]]);
     stubTopicList([{ id: 1, name: 'Sprint 12', message_count: 0 }]);
     stubTopicDetail({ id: 1, name: 'Sprint 12', message_count: 0, messages: [] });
     stubStreamQuestion(
@@ -26,6 +50,7 @@ describe('AI Code Assistant app', () => {
         question: 'Bonjour, aide-moi !',
         system_prompt: 'code expert',
         topic_id: 1,
+        sources: [defaultSources[0].id],
       },
       [
         { event: 'meta', data: { num_contexts: 1 } },
@@ -56,6 +81,7 @@ describe('AI Code Assistant app', () => {
     const question = 'Nouvelle exploration du module paiement';
     const expectedTopic = `${question}`;
 
+    stubRagSources([defaultSources[0]]);
     stubTopicList([]);
     cy.intercept('POST', `${apiUrl}/topics/`, (req) => {
       expect(req.body).to.deep.equal({ name: expectedTopic });
@@ -63,7 +89,7 @@ describe('AI Code Assistant app', () => {
     }).as('createTopic');
     stubTopicDetail({ id: 4, name: expectedTopic, message_count: 1, messages: [] });
     stubStreamQuestion(
-      { question, system_prompt: 'code expert', topic_id: 4 },
+      { question, system_prompt: 'code expert', topic_id: 4, sources: [defaultSources[0].id] },
       [
         { event: 'token', data: 'Réponse en ' },
         { event: 'done', data: { answer: 'Réponse en cours.' } },
@@ -85,6 +111,7 @@ describe('AI Code Assistant app', () => {
 
   it('allows selecting a custom system prompt and sends it to the API', () => {
     // Arrange
+    stubRagSources([defaultSources[0]]);
     stubTopicList([{ id: 2, name: 'Docs', message_count: 0 }]);
     stubTopicDetail({ id: 2, name: 'Docs', message_count: 0, messages: [] });
     stubStreamQuestion(
@@ -93,6 +120,7 @@ describe('AI Code Assistant app', () => {
         system_prompt: 'custom',
         custom_prompt: 'Parle en français',
         topic_id: 2,
+        sources: [defaultSources[0].id],
       },
       [
         { event: 'meta', data: {} },
@@ -118,6 +146,7 @@ describe('AI Code Assistant app', () => {
 
   it('creates a new topic and shows its empty conversation state', () => {
     // Arrange
+    stubRagSources([defaultSources[0]]);
     let listCall = 0;
     cy.intercept('GET', 'http://localhost:8000/api/topics/**', (req) => {
       listCall += 1;
@@ -147,6 +176,7 @@ describe('AI Code Assistant app', () => {
 
   it('lists multiple topics and loads their histories when switching', () => {
     // Arrange
+    stubRagSources([defaultSources[0]]);
     stubTopicList([
       { id: 2, name: 'Bugfix', message_count: 1 },
       { id: 1, name: 'Sprint 12', message_count: 2 },
@@ -192,6 +222,7 @@ describe('AI Code Assistant app', () => {
 
   it('navigates to the Build RAG page and triggers an index build', () => {
     // Arrange
+    stubRagSources([defaultSources[0]]);
     stubTopicList([]);
     let progressCall = 0;
     cy.intercept('GET', `${apiUrl}/code-qa/build-rag/`, (req) => {
@@ -241,6 +272,7 @@ describe('AI Code Assistant app', () => {
 
   it('opens the topic search overlay and switches to a matched topic', () => {
     // Arrange
+    stubRagSources([defaultSources[0]]);
     stubTopicList([
       { id: 1, name: 'Sprint 12', message_count: 1 },
       { id: 2, name: 'Release planning', message_count: 2 },
@@ -302,6 +334,7 @@ describe('AI Code Assistant app', () => {
 
   it('shows grouped global search results and loads more entries per category', () => {
     // Arrange
+    stubRagSources([defaultSources[0]]);
     stubTopicList([{ id: 5, name: 'Docs', message_count: 3 }]);
     stubTopicDetail(
       {
@@ -485,5 +518,71 @@ describe('AI Code Assistant app', () => {
 
     // Assert
     globalSearch.expectResultInGroup('answers', 'Automate doc deploys').expectMoreButton('answers', false);
+  });
+});
+
+  it('selects multiple RAG sources and shows used sources in chat', () => {
+    // Arrange
+    stubRagSources(defaultSources);
+    stubTopicList([{ id: 7, name: 'Multi RAG', message_count: 0 }]);
+    stubTopicDetail({ id: 7, name: 'Multi RAG', message_count: 0, messages: [] });
+    stubStreamQuestion(
+      {
+        question: 'Quel code est impacté ?',
+        system_prompt: 'code expert',
+        topic_id: 7,
+        sources: [defaultSources[0].id, defaultSources[1].id],
+      },
+      [
+        { event: 'meta', data: { source_names: ['Backend', 'Frontend'], contexts: [] } },
+        { event: 'done', data: { answer: 'Réponse combinée.' } },
+      ],
+      'multiSourceStream'
+    );
+
+    // Act
+    chatPage.visit();
+    topicsPanel.waitForTopicList().waitForTopicDetail();
+    chatPage.selectRagSources(['Backend', 'Frontend']);
+    chatPage.typeQuestion('Quel code est impacté ?').clickSend();
+
+    // Assert
+    cy.wait('@multiSourceStream')
+      .its('request.body.sources')
+      .should('deep.equal', [defaultSources[0].id, defaultSources[1].id]);
+    chatPage.expectAssistantMessageContains('Réponse combinée.');
+    cy.get('[data-cy="sources-used-banner"]').should('contain', 'Backend').and('contain', 'Frontend');
+  });
+
+  it('edits and rebuilds rag sources from the manager panel', () => {
+    // Arrange
+    stubRagSources(defaultSources);
+    stubUpdateRagSource('source-1', { ...defaultSources[0], name: 'Backend v2' });
+    stubRebuildRagSource(
+      'source-2',
+      ['/workspace/new'],
+      { ...defaultSources[1], total_files: 20, total_chunks: 30 },
+      'rebuildSourceAlias'
+    );
+    stubTopicList([{ id: 8, name: 'Manage RAG', message_count: 0 }]);
+    stubTopicDetail({ id: 8, name: 'Manage RAG', message_count: 0, messages: [] });
+
+    // Act
+    chatPage.visit();
+    topicsPanel.waitForTopicList().waitForTopicDetail();
+    chatPage.editRagSource('Backend', 'Backend v2', 'API updated');
+    chatPage.rebuildRagSource('Frontend', '/workspace/new');
+
+    // Assert
+    cy.wait('@updateRagSource').its('request.body').should('deep.equal', {
+      name: 'Backend v2',
+      description: 'API updated',
+    });
+    cy.wait('@rebuildSourceAlias').its('request.body').should('deep.include', {
+      name: 'Frontend',
+      description: 'Angular UI',
+    });
+    cy.contains('[data-cy="rag-source-card"]', 'Backend v2').should('exist');
+    cy.contains('[data-cy="rag-source-card"]', 'Frontend').should('contain', '20');
   });
 });

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 from django.db import models
 
 
@@ -33,3 +35,19 @@ class Message(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - string representation
         return f"{self.role}: {self.content[:20]}"
+
+
+class RagSource(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    path = models.CharField(max_length=500)
+    created_at = models.DateTimeField(auto_now_add=True)
+    total_files = models.PositiveIntegerField(default=0)
+    total_chunks = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["-created_at", "name"]
+
+    def __str__(self) -> str:  # pragma: no cover - string representation
+        return self.name

@@ -41,6 +41,12 @@ class CodeQuestionSerializer(serializers.Serializer):
         max_value=1.0,
         default=0.5,
     )
+    sources = serializers.ListField(
+        child=serializers.UUIDField(format='hex_verbose'),
+        required=False,
+        allow_empty=True,
+        default=list,
+    )
     topic_id = serializers.IntegerField(
         required=False,
         min_value=1,
@@ -82,6 +88,36 @@ class BuildRagRequestSerializer(serializers.Serializer):
         default=None,
         help_text="Optional filesystem path to use as project root when building the RAG index.",
     )
+
+
+class RagSourceSerializer(serializers.Serializer):
+    id = serializers.UUIDField(format='hex_verbose')
+    name = serializers.CharField()
+    description = serializers.CharField()
+    path = serializers.CharField()
+    created_at = serializers.DateTimeField()
+    total_files = serializers.IntegerField()
+    total_chunks = serializers.IntegerField()
+
+
+class RagSourceBuildSerializer(serializers.Serializer):
+    name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    description = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    paths = serializers.ListField(
+        child=serializers.CharField(),
+        allow_empty=False,
+    )
+
+
+class RagSourceUpdateSerializer(serializers.Serializer):
+    name = serializers.CharField(required=False, allow_blank=False, allow_null=True)
+    description = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+
+
+class RagSourceRebuildSerializer(serializers.Serializer):
+    name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    description = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    paths = serializers.ListField(child=serializers.CharField(), allow_empty=False)
 
 
 class DocumentSerializer(serializers.Serializer):

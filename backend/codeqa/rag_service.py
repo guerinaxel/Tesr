@@ -4,10 +4,12 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, Tuple
+from uuid import UUID
 
 from ollama import ChatResponse, chat
 
 from .rag_index import RagConfig, RagIndex
+from .models import RagSource
 
 
 class AnswerNotReadyError(RuntimeError):
@@ -15,6 +17,8 @@ class AnswerNotReadyError(RuntimeError):
 
 
 _rag_index: RagIndex | None = None
+_rag_indexes: dict[str, RagIndex] = {}
+_rag_sources_cache: dict[str, RagSource] = {}
 
 
 def _get_data_dir() -> Path:
@@ -57,14 +61,56 @@ def get_rag_index() -> RagIndex:
     return _rag_index
 
 
+def _rag_sources_base_dir() -> Path:
+    return Path(os.getenv("RAG_SOURCES_DIR", _get_data_dir() / "rag_sources"))
+
+
+def _config_for_source(source: RagSource) -> RagConfig:
+    base_dir = Path(source.path)
+    index_path = base_dir / "rag_index.faiss"
+    docs_path = base_dir / "docs.pkl"
+    whoosh_dir = base_dir / "whoosh_index"
+    return RagConfig(
+        index_path=index_path,
+        docs_path=docs_path,
+        whoosh_index_dir=whoosh_dir,
+        embedding_model_name=os.getenv("RAG_EMBED_MODEL", RagConfig.embedding_model_name),
+        fallback_embedding_model_name=os.getenv(
+            "RAG_EMBED_MODEL_FALLBACK", RagConfig.fallback_embedding_model_name
+        ),
+    )
+
+
+def _load_rag_source(source: RagSource) -> RagIndex:
+    source_id = str(source.id)
+    cached = _rag_indexes.get(source_id)
+    if cached is not None:
+        return cached
+
+    config = _config_for_source(source)
+    index = RagIndex(config)
+    index.load()
+    _rag_indexes[source_id] = index
+    _rag_sources_cache[source_id] = source
+    return index
+
+
+def drop_cached_source(source_id: str) -> None:
+    _rag_indexes.pop(source_id, None)
+    _rag_sources_cache.pop(source_id, None)
+
+
 def answer_question(
     question: str,
     top_k: int = 5,
     fusion_weight: float = 0.5,
     system_prompt: str | None = None,
     custom_prompt: str | None = None,
+    sources: list[UUID] | None = None,
 ) -> Tuple[str, Dict]:
-    prepared = _prepare_chat(question, top_k, fusion_weight, system_prompt, custom_prompt)
+    prepared = _prepare_chat(
+        question, top_k, fusion_weight, system_prompt, custom_prompt, sources=sources
+    )
     try:
         response: ChatResponse = _run_chat_sync(prepared)
     except Exception:
@@ -90,8 +136,11 @@ def stream_answer(
     fusion_weight: float = 0.5,
     system_prompt: str | None = None,
     custom_prompt: str | None = None,
+    sources: list[UUID] | None = None,
 ) -> tuple[Dict, Iterable[str]]:
-    prepared = _prepare_chat(question, top_k, fusion_weight, system_prompt, custom_prompt)
+    prepared = _prepare_chat(
+        question, top_k, fusion_weight, system_prompt, custom_prompt, sources=sources
+    )
     meta = _build_meta(prepared.contexts)
 
     def _tokens_for_model(model_name: str) -> Iterable[str]:
@@ -131,19 +180,62 @@ def stream_answer(
 class PreparedChat:
     user_content: str
     system_prompt: str
-    contexts: list[tuple[str, float]]
+    contexts: list[tuple[str, float, str, str]]
     model_name: str
     fallback_model: str | None
 
 
-def _build_meta(contexts: list[tuple[str, float]]) -> Dict:
+def _build_meta(contexts: list[tuple[str, float, str, str]]) -> Dict:
+    unique_sources: dict[str, str] = {}
+    for _snippet, _score, source_id, source_name in contexts:
+        unique_sources[source_id] = source_name
+
     return {
         "num_contexts": len(contexts),
+        "sources": list(unique_sources.keys()),
+        "source_names": list(unique_sources.values()),
         "contexts": [
-            {"rank": i + 1, "score": score, "snippet": snippet}
-            for i, (snippet, score) in enumerate(contexts)
+            {
+                "rank": i + 1,
+                "score": score,
+                "snippet": snippet,
+                "source_id": source_id,
+                "source_name": source_name,
+            }
+            for i, (snippet, score, source_id, source_name) in enumerate(contexts)
         ],
     }
+
+
+def _gather_contexts(
+    question: str,
+    top_k: int,
+    fusion_weight: float,
+    sources: list[UUID] | None,
+) -> list[tuple[str, float, str, str]]:
+    if not sources:
+        raise AnswerNotReadyError("No RAG sources selected.")
+
+    rag_sources = list(RagSource.objects.filter(id__in=sources))
+    if not rag_sources:
+        raise AnswerNotReadyError("No matching RAG sources found.")
+
+    combined: list[tuple[str, float, str, str]] = []
+    for rag_source in rag_sources:
+        index = _load_rag_source(rag_source)
+        hits = index.search(question, k=top_k, fusion_weight=fusion_weight)
+        if not hits:
+            continue
+        max_score = max(score for _, score in hits) or 1.0
+        for snippet, score in hits:
+            normalized = score / max_score if max_score else score
+            combined.append((snippet, normalized, str(rag_source.id), rag_source.name))
+
+    if not combined:
+        raise AnswerNotReadyError("RAG index is empty or not initialized.")
+
+    combined.sort(key=lambda item: item[1], reverse=True)
+    return combined[:top_k]
 
 
 def _prepare_chat(
@@ -152,11 +244,10 @@ def _prepare_chat(
     fusion_weight: float,
     system_prompt: str | None,
     custom_prompt: str | None,
+    *,
+    sources: list[UUID] | None,
 ) -> PreparedChat:
-    index = get_rag_index()
-    contexts = index.search(question, k=top_k, fusion_weight=fusion_weight)
-    if not contexts:
-        raise AnswerNotReadyError("RAG index is empty or not initialized.")
+    contexts = _gather_contexts(question, top_k, fusion_weight, sources)
 
     system_prompt_mapping = {
         "code expert": " ".join(
@@ -202,8 +293,8 @@ def _prepare_chat(
         selected_prompt = system_prompt_mapping.get(prompt_choice, system_prompt_mapping["code expert"])
 
     context_text = "\n\n".join(
-        f"[Doc {i+1}, score={score:.3f}]\n{snippet}"
-        for i, (snippet, score) in enumerate(contexts)
+        f"[Doc {i+1}, score={score:.3f}, source={source_name}]\n{snippet}"
+        for i, (snippet, score, _, source_name) in enumerate(contexts)
     )
 
     user_content = (
