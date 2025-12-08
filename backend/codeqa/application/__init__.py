@@ -6,7 +6,11 @@ from .errors import (
     RagSourcePathMissingError,
 )
 from .rag_query_service import RagQueryService
-from .rag_source_service import RagSourceService
+from .rag_source_service import (
+    RagSourceBuildResult,
+    RagSourceBuildStatus,
+    RagSourceService,
+)
 
 __all__ = [
     "DomainError",
@@ -15,5 +19,7 @@ __all__ = [
     "RagSourceNotFoundError",
     "RagSourcePathMissingError",
     "RagQueryService",
+    "RagSourceBuildResult",
+    "RagSourceBuildStatus",
     "RagSourceService",
 ]

@@ -15,6 +15,7 @@ from . import rag_service  # noqa: F401  # imported for test patching hooks
 from .application import (
     DomainError,
     RagQueryService,
+    RagSourceBuildStatus,
     RagSourceService,
 )
 from .document_service import (
@@ -44,7 +45,9 @@ rag_source_service = RagSourceService()
 
 
 def _handle_domain_error(exc: DomainError) -> Response:
-    return Response({"detail": exc.detail, "code": exc.code}, status=exc.status_code)
+    payload = {"detail": exc.detail, "code": exc.code}
+    payload["status"] = RagSourceBuildStatus.failed(message=exc.detail).to_dict()
+    return Response(payload, status=exc.status_code)
 
 
 def _parse_pagination(request: HttpRequest, *, default_limit: int = 20, max_limit: int = 50) -> tuple[int, int]:
@@ -489,7 +492,7 @@ class RagSourceBuildView(APIView):
         description = serializer.validated_data.get("description")
 
         try:
-            source = rag_source_service.build_source(
+            result = rag_source_service.build_source(
                 name=name,
                 description=description,
                 paths=paths,
@@ -500,13 +503,8 @@ class RagSourceBuildView(APIView):
             return _handle_domain_error(exc)
 
         payload = {
-            "id": source.id,
-            "name": source.name,
-            "description": source.description,
-            "path": source.path,
-            "created_at": source.created_at,
-            "total_files": source.total_files,
-            "total_chunks": source.total_chunks,
+            "source": RagSourceSerializer(result.source).data,
+            "status": result.status.to_dict(),
         }
         return Response(payload, status=status.HTTP_201_CREATED)
 
@@ -541,7 +539,7 @@ class RagSourceRebuildView(APIView):
         paths = serializer.validated_data["paths"]
 
         try:
-            updated_source = rag_source_service.rebuild_source(
+            result = rag_source_service.rebuild_source(
                 source_id=source_id,
                 name=name,
                 description=description,
@@ -553,6 +551,9 @@ class RagSourceRebuildView(APIView):
             return _handle_domain_error(exc)
 
         return Response(
-            RagSourceSerializer(updated_source).data,
+            {
+                "source": RagSourceSerializer(result.source).data,
+                "status": result.status.to_dict(),
+            },
             status=status.HTTP_200_OK,
         )
