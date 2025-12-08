@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import sys
 import types
 import unittest
@@ -146,14 +147,21 @@ class RagIndexWithFakes(SimpleTestCase):
             self.assertEqual(["alpha", "beta"], self.fake_storage[str(config.docs_path)])
             token_path = str(config.tokenized_docs_path)
             keyword_path = str(config.keyword_index_path)
+            embeddings_path = str(config.embeddings_path)
             self.assertIn(token_path, self.fake_storage)
             self.assertIn(keyword_path, self.fake_storage)
+            self.assertIn(embeddings_path, self.fake_storage)
             self.assertEqual([["alpha"], ["beta"]], self.fake_storage[token_path])
             self.assertIn("idf", self.fake_storage[keyword_path])
+            self.assertEqual((2, 3), self.fake_storage[embeddings_path].shape)
             self.assertEqual(["alpha", "beta"], rag_index._docs)
             self.assertEqual([["alpha"], ["beta"]], rag_index._tokenized_docs)
             self.assertIsInstance(rag_index._index, FakeIndexFlatIP)
             self.assertIsInstance(rag_index._inverted_index, FakeInvertedIndex)
+            metadata = json.loads(config.metadata_path.read_text())
+            self.assertEqual(config.index_version, metadata["version"])
+            self.assertIn("checksum", metadata)
+            self.assertIsNotNone(rag_index._doc_embeddings)
 
     def test_load_reads_index_and_documents(self) -> None:
         from codeqa.rag_index import RagConfig, RagIndex
@@ -172,12 +180,18 @@ class RagIndexWithFakes(SimpleTestCase):
                 "doc_lengths": [1, 1],
                 "avgdl": 1.0,
             }
+            embeddings_path = docs_path.with_name("docs_embeddings.pkl")
+            self.fake_storage[str(embeddings_path)] = np.ones((2, 3), dtype=float)
 
             config = RagConfig(
                 index_path=index_path,
                 docs_path=docs_path,
                 embedding_model_name="local-model",
                 fallback_embedding_model_name="local-fallback",
+            )
+            checksum = RagIndex(config)._compute_checksum(["doc1", "doc2"])  # type: ignore[attr-defined]
+            config.metadata_path.write_text(
+                json.dumps({"version": config.index_version, "checksum": checksum})
             )
             rag_index = RagIndex(config)
 
@@ -190,6 +204,39 @@ class RagIndexWithFakes(SimpleTestCase):
             self.assertEqual([["doc1"], ["doc2"]], rag_index._tokenized_docs)
             self.assertIsNotNone(rag_index._keyword_index)
             self.assertIsInstance(rag_index._inverted_index, FakeInvertedIndex)
+            self.assertIsNotNone(rag_index._doc_embeddings)
+
+    def test_load_rebuilds_when_version_changes(self) -> None:
+        from codeqa.rag_index import RagConfig, RagIndex
+
+        with TemporaryDirectory() as tmp:
+            index_path = Path(tmp) / "idx.faiss"
+            docs_path = Path(tmp) / "docs.pkl"
+            self.fake_storage[str(docs_path)] = ["doc1", "doc2"]
+            self.fake_storage[str(docs_path.with_name("docs_tokens.pkl"))] = [
+                ["doc1"],
+                ["doc2"],
+            ]
+            self.fake_storage[str(docs_path.with_name("docs_keywords.pkl"))] = {
+                "idf": {},
+                "doc_lengths": [1, 1],
+                "avgdl": 1.0,
+            }
+            config = RagConfig(
+                index_path=index_path,
+                docs_path=docs_path,
+                embedding_model_name="local-model",
+                fallback_embedding_model_name="local-fallback",
+            )
+            config.metadata_path.write_text(
+                json.dumps({"version": "outdated", "checksum": "mismatch"})
+            )
+            rag_index = RagIndex(config)
+
+            rag_index.load()
+
+            self.assertGreaterEqual(len(rag_index._model.encodes), 1)
+            self.assertIn("written", self.fake_storage)
 
     def test_search_returns_scored_results(self) -> None:
         from codeqa.rag_index import RagConfig, RagIndex

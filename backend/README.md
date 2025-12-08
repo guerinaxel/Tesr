@@ -198,6 +198,8 @@ docker compose up --build
 - Modifier le modèle d’embedding → variable d’environnement `RAG_EMBED_MODEL` (par défaut `nomic-ai/nomic-embed-text-v1.5`).
 - Définir un modèle de secours en cas d’échec de téléchargement → `RAG_EMBED_MODEL_FALLBACK` (par défaut `sentence-transformers/all-MiniLM-L6-v2`).
 - Le backend reconstruit automatiquement l’index FAISS si la dimension des embeddings change (ex. passage d’un ancien modèle vers Nomic).
+- Persister les embeddings des chunks et vérifier la cohérence → `RAG_PERSIST_EMBEDDINGS=true|false` (par défaut `true`) et `RAG_INDEX_VERSION` (force une reconstruction lorsque la version change).
+- Pré-charger le cache en mémoire après un build pour les requêtes RAG → `RAG_WARM_CACHE_ON_BUILD=true`.
 - Augmenter la profondeur RAG → `k=5` → `k=10`
 
 ---

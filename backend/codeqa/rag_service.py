@@ -21,6 +21,17 @@ _rag_indexes: dict[str, RagIndex] = {}
 _rag_sources_cache: dict[str, RagSource] = {}
 
 
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.lower() in {"1", "true", "yes", "on"}
+
+
+def _warm_cache_enabled() -> bool:
+    return _env_flag("RAG_WARM_CACHE_ON_BUILD", False)
+
+
 def _get_data_dir() -> Path:
     return Path(os.getenv("RAG_DATA_DIR", Path(__file__).resolve().parent / "data"))
 
@@ -40,6 +51,8 @@ def _build_config_from_env() -> RagConfig:
     fallback_embedding_model_name = os.getenv(
         "RAG_EMBED_MODEL_FALLBACK", RagConfig.fallback_embedding_model_name
     )
+    persist_embeddings = _env_flag("RAG_PERSIST_EMBEDDINGS", True)
+    index_version = os.getenv("RAG_INDEX_VERSION", RagConfig.index_version)
     whoosh_dir_env = os.getenv("RAG_WHOOSH_DIR")
     whoosh_dir = Path(whoosh_dir_env) if whoosh_dir_env else docs_path.parent / "whoosh_index"
     return RagConfig(
@@ -48,6 +61,8 @@ def _build_config_from_env() -> RagConfig:
         whoosh_index_dir=whoosh_dir,
         embedding_model_name=embedding_model_name,
         fallback_embedding_model_name=fallback_embedding_model_name,
+        persist_embeddings=persist_embeddings,
+        index_version=index_version,
     )
 
 
@@ -69,15 +84,21 @@ def _config_for_source(source: RagSource) -> RagConfig:
     base_dir = Path(source.path)
     index_path = base_dir / "rag_index.faiss"
     docs_path = base_dir / "docs.pkl"
+    embeddings_path = base_dir / "embeddings.pkl"
+    metadata_path = base_dir / "index_meta.json"
     whoosh_dir = base_dir / "whoosh_index"
     return RagConfig(
         index_path=index_path,
         docs_path=docs_path,
         whoosh_index_dir=whoosh_dir,
+        embeddings_path=embeddings_path,
+        metadata_path=metadata_path,
         embedding_model_name=os.getenv("RAG_EMBED_MODEL", RagConfig.embedding_model_name),
         fallback_embedding_model_name=os.getenv(
             "RAG_EMBED_MODEL_FALLBACK", RagConfig.fallback_embedding_model_name
         ),
+        persist_embeddings=_env_flag("RAG_PERSIST_EMBEDDINGS", True),
+        index_version=os.getenv("RAG_INDEX_VERSION", RagConfig.index_version),
     )
 
 
@@ -98,6 +119,14 @@ def _load_rag_source(source: RagSource) -> RagIndex:
 def drop_cached_source(source_id: str) -> None:
     _rag_indexes.pop(source_id, None)
     _rag_sources_cache.pop(source_id, None)
+
+
+def warm_cached_source(source: RagSource, *, index: RagIndex | None = None) -> RagIndex:
+    source_id = str(source.id)
+    rag_index = index or _load_rag_source(source)
+    _rag_indexes[source_id] = rag_index
+    _rag_sources_cache[source_id] = source
+    return rag_index
 
 
 def answer_question(
