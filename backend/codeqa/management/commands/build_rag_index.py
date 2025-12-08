@@ -7,6 +7,7 @@ from typing import List
 
 from django.core.management.base import BaseCommand, CommandParser
 
+from codeqa import rag_service
 from codeqa.code_extractor import collect_code_chunks, iter_text_files
 from codeqa.rag_index import RagIndex
 from codeqa.rag_service import _build_config_from_env, _rag_sources_base_dir
@@ -93,6 +94,8 @@ class Command(BaseCommand):
         config.index_path = index_path
         config.docs_path = docs_path
         config.whoosh_index_dir = base_dir / "whoosh_index"
+        config.embeddings_path = base_dir / "embeddings.pkl"
+        config.metadata_path = base_dir / "index_meta.json"
 
         if not force and index_path.exists():
             self.stderr.write("Index already exists. Use --force to rebuild.")
@@ -100,6 +103,9 @@ class Command(BaseCommand):
 
         rag_index = RagIndex(config)
         rag_index.build_from_texts(chunks)
+        if rag_service._warm_cache_enabled():
+            rag_service.drop_cached_source(str(source.id))
+            rag_service.warm_cached_source(source, index=rag_index)
 
         metadata = {
             "id": str(source.id),

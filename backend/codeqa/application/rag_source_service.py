@@ -175,6 +175,8 @@ class RagSourceService:
             config.index_path = base_dir / "rag_index.faiss"
             config.docs_path = base_dir / "docs.pkl"
             config.whoosh_index_dir = base_dir / "whoosh_index"
+            config.embeddings_path = base_dir / "embeddings.pkl"
+            config.metadata_path = base_dir / "index_meta.json"
 
             rag_index_cls = rag_service_module.RagIndex
             rag_index = rag_index_cls(config)
@@ -182,6 +184,8 @@ class RagSourceService:
 
             self._write_metadata_file(source)
             rag_service_module.drop_cached_source(str(source.id))
+            if rag_service_module._warm_cache_enabled():
+                rag_service_module.warm_cached_source(source, index=rag_index)
             return source
         except (RagSourcePathMissingError, RagSourceNotFoundError):
             raise
