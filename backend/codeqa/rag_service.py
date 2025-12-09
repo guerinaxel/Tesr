@@ -345,7 +345,7 @@ def _prepare_chat(
 def _select_model(choice: str) -> tuple[str, str | None]:
     if choice == "document expert":
         primary = os.getenv("OLLAMA_DOC_MODEL_NAME", "qwen2.5vl:7b")
-        fallback = os.getenv("OLLAMA_DOC_MODEL_FALLBACK", "qwen2.5-vl:3b")
+        fallback = os.getenv("OLLAMA_DOC_MODEL_FALLBACK", "qwen2.5vl:3b")
         return primary, fallback
     return os.getenv("OLLAMA_MODEL_NAME", "llama3.1:8b"), None
 
