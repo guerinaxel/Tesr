@@ -93,6 +93,8 @@ class Command(BaseCommand):
         docs_path = base_dir / "docs.pkl"
         config.index_path = index_path
         config.docs_path = docs_path
+        config.tokenized_docs_path = base_dir / "docs_tokens.pkl"
+        config.keyword_index_path = base_dir / "docs_keywords.pkl"
         config.whoosh_index_dir = base_dir / "whoosh_index"
         config.embeddings_path = base_dir / "embeddings.pkl"
         config.metadata_path = base_dir / "index_meta.json"

@@ -311,6 +311,8 @@ class RagSourceService:
         config = rag_service_module._build_config_from_env()
         config.index_path = base_dir / "rag_index.faiss"
         config.docs_path = base_dir / "docs.pkl"
+        config.tokenized_docs_path = base_dir / "docs_tokens.pkl"
+        config.keyword_index_path = base_dir / "docs_keywords.pkl"
         config.whoosh_index_dir = base_dir / "whoosh_index"
         config.embeddings_path = base_dir / "embeddings.pkl"
         config.metadata_path = base_dir / "index_meta.json"
